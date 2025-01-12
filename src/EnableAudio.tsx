@@ -55,8 +55,8 @@ export function EnableAudio({
   if (permissionDenied) {
     return (
       <PermissionDenied>
-        Permission denied. Please enable audio in your browser settings. (
-        {error})
+        Permission denied. Please enable audio in your browser settings.
+        {error}
       </PermissionDenied>
     );
   }

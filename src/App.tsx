@@ -7,6 +7,7 @@ import { joinSession } from './joinSession.ts';
 
 export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [error, setError] = useState('');
   const [id, setId] = useState('');
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
@@ -14,11 +15,20 @@ export default function App() {
   useEffect(() => {
     (async () => {
       if (audioEnabled && paramId) {
-        await joinSession(paramId);
+        const sessionError = await joinSession(paramId);
+        setError(sessionError);
         setId(paramId);
       }
     })();
   }, [audioEnabled, paramId]);
+
+  if (error) {
+    return (
+      <Container>
+        <p>{error}</p>
+      </Container>
+    );
+  }
 
   if (!audioEnabled) {
     return (
@@ -39,10 +49,14 @@ export default function App() {
   return (
     <Container>
       <p>You are connected.</p>
-      <div>Invite others to join the session:</div>
-      <Link>
-        {window.location.origin}/?id={id}
-      </Link>
+      {!paramId && (
+        <>
+          <div>Invite others to join the session:</div>
+          <Link>
+            {window.location.origin}/?id={id}
+          </Link>
+        </>
+      )}
     </Container>
   );
 }

@@ -1,7 +1,7 @@
 import { firestore } from './firebase.ts';
 import { pc } from './pc.ts';
 
-export async function joinSession(id: string) {
+export async function joinSession(id: string): Promise<string> {
   const callDoc = firestore.collection('calls').doc(id);
   const answerCandidates = callDoc.collection('answerCandidates');
   const offerCandidates = callDoc.collection('offerCandidates');
@@ -12,13 +12,14 @@ export async function joinSession(id: string) {
 
   const callData = (await callDoc.get()).data();
 
-  if (!callData) return;
+  if (!callData) return 'Session not found';
+  if (callData.answer?.connected) return 'Session expired';
 
   const offerDescription = callData.offer;
   await pc.setRemoteDescription(new RTCSessionDescription(offerDescription));
 
   const answerDescription = await pc.createAnswer();
-  if (!answerDescription.sdp) return;
+  if (!answerDescription.sdp) return 'Session corrupted';
 
   answerDescription.sdp = answerDescription.sdp.replace(
     'useinbandfec=1',
@@ -29,17 +30,19 @@ export async function joinSession(id: string) {
   const answer = {
     type: answerDescription.type,
     sdp: answerDescription.sdp,
+    connected: true,
   };
 
   await callDoc.update({ answer });
 
   offerCandidates.onSnapshot((snapshot) => {
     snapshot.docChanges().forEach((change) => {
-      console.log(change);
       if (change.type === 'added') {
         const data = change.doc.data();
         pc.addIceCandidate(new RTCIceCandidate(data));
       }
     });
   });
+
+  return '';
 }

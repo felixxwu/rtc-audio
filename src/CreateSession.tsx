@@ -24,6 +24,7 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
     const offer = {
       sdp: offerDescription.sdp,
       type: offerDescription.type,
+      connected: false,
     };
 
     await callDoc.set({ offer });
@@ -46,10 +47,6 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
         }
       });
     });
-
-    const params = new URLSearchParams(document.location.search);
-    params.set('id', callDoc.id);
-    history.replaceState(null, '', `${location.pathname}?${params}`);
   };
 
   return <Button onClick={handleCreateCall}>Start New Session</Button>;
