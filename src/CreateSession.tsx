@@ -12,6 +12,10 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
 
     setId(callDoc.id);
 
+    const params = new URLSearchParams(document.location.search);
+    params.set('id', callDoc.id);
+    history.pushState(null, '', `${location.pathname}?${params}`);
+
     // Get candidates for caller, save to db
     pc.onicecandidate = (event) => {
       if (event.candidate) offerCandidates.add(event.candidate.toJSON());

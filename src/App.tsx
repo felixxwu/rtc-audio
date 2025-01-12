@@ -10,7 +10,6 @@ export default function App() {
   const [id, setId] = useState('');
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
-  console.log(`paramId`, paramId);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +38,7 @@ export default function App() {
 
   return (
     <Container>
+      <p>You are connected.</p>
       <div>Invite others to join the session:</div>
       <Link>
         {window.location.origin}/?id={id}
