@@ -41,7 +41,7 @@ export default function App() {
     <Container>
       <div>Invite others to join the session:</div>
       <Link>
-        {window.location.origin}/?id=${id}
+        {window.location.origin}/?id={id}
       </Link>
     </Container>
   );
