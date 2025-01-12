@@ -51,7 +51,7 @@ export default function App() {
       <p>You are connected.</p>
       {!paramId && (
         <>
-          <div>Invite others to join the session:</div>
+          <div>Invite someone to join the session:</div>
           <Link>
             {window.location.origin}/?id={id}
           </Link>
