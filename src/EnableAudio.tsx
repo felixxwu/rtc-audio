@@ -44,8 +44,8 @@ export function EnableAudio({
       audio.srcObject = remoteStream;
 
       setAudioEnabled(true);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_) {
+    } catch (e) {
+      console.error(e);
       setPermissionDenied(true);
     }
   };
