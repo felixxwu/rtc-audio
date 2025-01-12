@@ -9,6 +9,7 @@ export function EnableAudio({
   setAudioEnabled: (enabled: boolean) => void;
 }) {
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [error, setError] = useState('');
 
   const handleEnableAudio = async () => {
     try {
@@ -46,6 +47,7 @@ export function EnableAudio({
       setAudioEnabled(true);
     } catch (e) {
       console.error(e);
+      setError((e as Error).message);
       setPermissionDenied(true);
     }
   };
@@ -53,7 +55,8 @@ export function EnableAudio({
   if (permissionDenied) {
     return (
       <PermissionDenied>
-        Permission denied. Please enable audio in your browser settings.
+        Permission denied. Please enable audio in your browser settings. (
+        {error})
       </PermissionDenied>
     );
   }
