@@ -18,11 +18,11 @@ export function EnableAudio({
         audio: {
           autoGainControl: false,
           channelCount: {
-            exact: 2,
+            ideal: 2,
           },
           echoCancellation: false,
           noiseSuppression: false,
-          sampleRate: 48000,
+          sampleRate: 44100,
           sampleSize: 16,
         },
       });

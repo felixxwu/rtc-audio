@@ -23,7 +23,7 @@ export async function joinSession(id: string): Promise<string> {
 
   answerDescription.sdp = answerDescription.sdp.replace(
     'useinbandfec=1',
-    'useinbandfec=1; stereo=1; maxaveragebitrate=1000000'
+    'useinbandfec=1; stereo=1; maxaveragebitrate=1411000'
   );
   await pc.setLocalDescription(answerDescription);
 

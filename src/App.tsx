@@ -4,13 +4,23 @@ import { colours } from './colours.ts';
 import { EnableAudio } from './EnableAudio.tsx';
 import { CreateSession } from './CreateSession.tsx';
 import { joinSession } from './joinSession.ts';
+import { pc } from './pc.ts';
+import { PlayingIcon } from './PlayingIcon.tsx';
 
 export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [error, setError] = useState('');
   const [id, setId] = useState('');
+  const [connectionState, setConnectionState] =
+    useState<RTCPeerConnectionState>('new');
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
+
+  useEffect(() => {
+    setInterval(() => {
+      setConnectionState(pc.connectionState);
+    }, 1000);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -48,8 +58,13 @@ export default function App() {
 
   return (
     <Container>
-      <p>You are connected.</p>
-      {!paramId && (
+      {connectionState === 'connected' && <PlayingIcon />}
+      <p>
+        {connectionState === 'connected'
+          ? 'You are connected.'
+          : `Session ${connectionState}`}
+      </p>
+      {!paramId && connectionState === 'new' && (
         <>
           <div>Invite someone to join the session:</div>
           <Link>
