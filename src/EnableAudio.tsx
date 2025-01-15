@@ -28,7 +28,10 @@ export function EnableAudio({
         },
       });
 
-      refs.audioContext = new AudioContext();
+      refs.audioContext = new AudioContext({
+        latencyHint: 'playback',
+        sampleRate: 44100,
+      });
       refs.gainNode = refs.audioContext.createGain();
 
       const source = refs.audioContext.createMediaStreamSource(localStream);
