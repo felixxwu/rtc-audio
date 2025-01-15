@@ -1,79 +1,19 @@
-import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { colors } from './colors.ts';
-import { EnableAudio } from './EnableAudio.tsx';
-import { CreateSession } from './CreateSession.tsx';
-import { joinSession } from './joinSession.ts';
-import { pc } from './pc.ts';
-import { PlayingIcon } from './PlayingIcon.tsx';
-import { VolumeControls } from './VolumeControls.tsx';
+import { GitHub, Icon } from './Icon.tsx';
+import { AppContent } from './AppContent.tsx';
 
 export default function App() {
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [error, setError] = useState('');
-  const [id, setId] = useState('');
-  const [connectionState, setConnectionState] =
-    useState<RTCPeerConnectionState>('new');
-  const params = new URLSearchParams(document.location.search);
-  const paramId = params.get('id');
-
-  useEffect(() => {
-    setInterval(() => {
-      setConnectionState(pc.connectionState);
-    }, 1000);
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      if (audioEnabled && paramId) {
-        const sessionError = await joinSession(paramId);
-        setError(sessionError);
-        setId(paramId);
-      }
-    })();
-  }, [audioEnabled, paramId]);
-
-  if (error) {
-    return (
-      <Container>
-        <p>{error}</p>
-      </Container>
-    );
-  }
-
-  if (!audioEnabled) {
-    return (
-      <Container>
-        <EnableAudio setAudioEnabled={setAudioEnabled} />
-      </Container>
-    );
-  }
-
-  if (!id) {
-    return (
-      <Container>
-        <CreateSession setId={setId} />
-      </Container>
-    );
-  }
-
   return (
     <Container>
-      {connectionState === 'connected' && <PlayingIcon />}
-      <p>
-        {connectionState === 'connected'
-          ? 'You are connected.'
-          : `Session ${connectionState}`}
-      </p>
-      {!paramId && connectionState === 'new' && (
-        <>
-          <div>Invite someone to join the session:</div>
-          <Link>
-            {window.location.origin}/?id={id}
-          </Link>
-        </>
-      )}
-      {connectionState === 'connected' && <VolumeControls />}
+      <AppContent />
+
+      <GitHubWrapper
+        href="https://github.com/felixxwu/rtc-audio"
+        target="_blank"
+      >
+        <Icon path={GitHub} color={colors.accent2} size={24} />
+      </GitHubWrapper>
     </Container>
   );
 }
@@ -91,9 +31,10 @@ const Container = styled('div')`
   text-align: center;
 `;
 
-const Link = styled('div')`
-  color: ${colors.accent2};
-  text-decoration: underline;
+const GitHubWrapper = styled('a')`
+  position: fixed;
+  top: 0;
+  right: 0;
+  padding: 10px;
   cursor: pointer;
-  user-select: all;
 `;
