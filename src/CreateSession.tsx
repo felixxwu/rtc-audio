@@ -1,6 +1,6 @@
 import { pc } from './pc.ts';
 import styled from 'styled-components';
-import { colours } from './colours.ts';
+import { colors } from './colors.ts';
 import { firestore } from './firebase.ts';
 
 export function CreateSession({ setId }: { setId: (id: string) => void }) {
@@ -57,11 +57,11 @@ const Button = styled('button')`
   padding: 10px 20px;
   border-radius: 100vw;
   border: none;
-  background-color: ${colours.accent};
-  color: ${colours.bg};
+  background-color: ${colors.accent};
+  color: ${colors.bg};
   cursor: pointer;
 
   &:hover {
-    background-color: ${colours.accent2};
+    background-color: ${colors.accent2};
   }
 `;

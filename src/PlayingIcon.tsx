@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { colours } from './colours.ts';
+import { colors } from './colors.ts';
 
 export function PlayingIcon() {
   return (
@@ -22,7 +22,7 @@ const Bars = styled('div')`
 const Bar = styled('span')`
   width: 6px;
   height: 100%;
-  background-color: ${colours.accent2};
+  background-color: ${colors.accent2};
   border-radius: 5px;
   transform-origin: bottom;
   animation: bounce 1.9s ease-in infinite;

@@ -1,7 +1,8 @@
 import { pc } from './pc.ts';
 import styled from 'styled-components';
-import { colours } from './colours.ts';
+import { colors } from './colors.ts';
 import { useState } from 'react';
+import { refs } from './refs.ts';
 
 export function EnableAudio({
   setAudioEnabled,
@@ -26,6 +27,15 @@ export function EnableAudio({
           sampleSize: 16,
         },
       });
+
+      refs.audioContext = new AudioContext();
+      refs.gainNode = refs.audioContext.createGain();
+
+      const source = refs.audioContext.createMediaStreamSource(localStream);
+      source.connect(refs.gainNode);
+      refs.gainNode.connect(refs.audioContext.destination);
+      refs.gainNode.gain.value = 0;
+
       const remoteStream = new MediaStream();
 
       // Push tracks from local stream to peer connection
@@ -40,9 +50,8 @@ export function EnableAudio({
         });
       };
 
-      const audio = new Audio();
-      audio.autoplay = true;
-      audio.srcObject = remoteStream;
+      refs.audio.autoplay = true;
+      refs.audio.srcObject = remoteStream;
 
       setAudioEnabled(true);
     } catch (e) {
@@ -69,15 +78,15 @@ const Button = styled('button')`
   padding: 10px 20px;
   border-radius: 100vw;
   border: none;
-  background-color: ${colours.accent};
-  color: ${colours.bg};
+  background-color: ${colors.accent};
+  color: ${colors.bg};
   cursor: pointer;
 
   &:hover {
-    background-color: ${colours.accent2};
+    background-color: ${colors.accent2};
   }
 `;
 
 const PermissionDenied = styled('p')`
-  color: ${colours.accent2};
+  color: ${colors.accent2};
 `;

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { colours } from './colours.ts';
+import { colors } from './colors.ts';
 import { EnableAudio } from './EnableAudio.tsx';
 import { CreateSession } from './CreateSession.tsx';
 import { joinSession } from './joinSession.ts';
 import { pc } from './pc.ts';
 import { PlayingIcon } from './PlayingIcon.tsx';
+import { VolumeControls } from './VolumeControls.tsx';
 
 export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
@@ -72,6 +73,7 @@ export default function App() {
           </Link>
         </>
       )}
+      {connectionState === 'connected' && <VolumeControls />}
     </Container>
   );
 }
@@ -84,12 +86,13 @@ const Container = styled('div')`
   justify-content: center;
   gap: 10px;
   align-items: center;
-  background-color: ${colours.bg};
-  color: ${colours.accent2};
+  background-color: ${colors.bg};
+  color: ${colors.accent2};
+  text-align: center;
 `;
 
 const Link = styled('div')`
-  color: ${colours.accent2};
+  color: ${colors.accent2};
   text-decoration: underline;
   cursor: pointer;
   user-select: all;
