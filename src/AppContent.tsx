@@ -7,6 +7,7 @@ import { PlayingIcon } from './PlayingIcon.tsx';
 import { VolumeControls } from './VolumeControls.tsx';
 import styled from 'styled-components';
 import { colors } from './colors.ts';
+import { refs } from './refs.ts';
 
 export function AppContent() {
   const [audioEnabled, setAudioEnabled] = useState(false);
@@ -14,13 +15,23 @@ export function AppContent() {
   const [id, setId] = useState('');
   const [connectionState, setConnectionState] =
     useState<RTCPeerConnectionState>('new');
+  const [newBytesReceived, setNewBytesReceived] = useState(0);
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
 
   useEffect(() => {
-    setInterval(() => {
+    const interval = setInterval(() => {
       setConnectionState(pc.connectionState);
+      pc.getStats(null).then((stats) => {
+        const totalBytesReceived =
+          [...stats.values()].find((s) => s.type === 'transport')
+            ?.bytesReceived ?? refs.totalBytesReceived;
+        setNewBytesReceived(totalBytesReceived - refs.totalBytesReceived);
+        refs.totalBytesReceived = totalBytesReceived;
+      });
     }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -62,7 +73,15 @@ export function AppContent() {
           </Link>
         </>
       )}
-      {connectionState === 'connected' && <VolumeControls />}
+      {connectionState === 'connected' && (
+        <>
+          <VolumeControls />
+          <p>
+            Bitrate (incoming):{' '}
+            {Math.max(0, Math.round((newBytesReceived / 1000) * 8))} kb/s
+          </p>
+        </>
+      )}
     </>
   );
 }
