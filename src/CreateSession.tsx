@@ -1,7 +1,6 @@
 import { pc } from './pc.ts';
-import styled from 'styled-components';
-import { colors } from './colors.ts';
 import { firestore } from './firebase.ts';
+import { Button } from './Button.tsx';
 
 export function CreateSession({ setId }: { setId: (id: string) => void }) {
   const handleCreateCall = async () => {
@@ -51,17 +50,3 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
 
   return <Button onClick={handleCreateCall}>Start New Session</Button>;
 }
-
-const Button = styled('button')`
-  outline: none;
-  padding: 10px 20px;
-  border-radius: 100vw;
-  border: none;
-  background-color: ${colors.accent};
-  color: ${colors.bg};
-  cursor: pointer;
-
-  &:hover {
-    background-color: ${colors.accent2};
-  }
-`;

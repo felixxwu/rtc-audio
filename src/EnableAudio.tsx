@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { colors } from './colors.ts';
 import { useState } from 'react';
 import { refs } from './refs.ts';
+import { Button } from './Button.tsx';
 
 export function EnableAudio({
   setAudioEnabled,
@@ -75,20 +76,6 @@ export function EnableAudio({
 
   return <Button onClick={handleEnableAudio}>Enable Audio</Button>;
 }
-
-const Button = styled('button')`
-  outline: none;
-  padding: 10px 20px;
-  border-radius: 100vw;
-  border: none;
-  background-color: ${colors.accent};
-  color: ${colors.bg};
-  cursor: pointer;
-
-  &:hover {
-    background-color: ${colors.accent2};
-  }
-`;
 
 const PermissionDenied = styled('p')`
   color: ${colors.accent2};
