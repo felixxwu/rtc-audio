@@ -3,6 +3,8 @@ export const refs = {
   audioContext: <AudioContext | null>null,
   gainNode: <GainNode | null>null,
   micGainNode: <GainNode | null>null,
+  micSender: <RTCRtpSender | null>null,
+  micTrack: <MediaStreamTrack | null>null,
   // Volume slider values live here so they survive VolumeControls
   // unmounting when the connection drops and reconnects.
   micVolume: 1,

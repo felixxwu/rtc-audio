@@ -24,6 +24,18 @@ export function VolumeControls() {
     if (refs.micGainNode) {
       refs.micGainNode.gain.value = micVolume;
     }
+    // At zero, stop transmitting entirely instead of sending encoded
+    // silence — frees the full upstream (CBR + RED never dips on quiet
+    // audio), which helps the incoming stream on weak connections.
+    if (refs.micSender) {
+      const shouldSend = micVolume > 0;
+      const isSending = refs.micSender.track !== null;
+      if (shouldSend !== isSending) {
+        refs.micSender
+          .replaceTrack(shouldSend ? refs.micTrack : null)
+          .catch(console.error);
+      }
+    }
   }, [micVolume]);
 
   useEffect(() => {

@@ -62,6 +62,11 @@ export function EnableAudio({
         // over intelligibility and avoids speech-tuned processing.
         track.contentHint = 'music';
         const sender = pc.addTrack(track, micDestination.stream);
+        // Kept so mic mute can detach/reattach the track: an unmuted-but-
+        // silent mic still costs full CBR+RED bandwidth, a detached one
+        // costs nothing.
+        refs.micSender = sender;
+        refs.micTrack = track;
 
         // Mark audio packets high priority (DSCP) so they win under
         // network contention. No-op in browsers that don't support it.
