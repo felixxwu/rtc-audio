@@ -14,6 +14,13 @@ export default function App() {
       >
         <Icon path={GitHub} color={colors.accent2} size={24} />
       </GitHubWrapper>
+
+      <Footer>
+        Want to route audio from your PC?{' '}
+        <FooterLink href="https://vb-audio.com/Cable/index.htm" target="_blank">
+          https://vb-audio.com/Cable/index.htm
+        </FooterLink>
+      </Footer>
     </Container>
   );
 }
@@ -29,6 +36,20 @@ const Container = styled('div')`
   background-color: ${colors.bg};
   color: ${colors.accent2};
   text-align: center;
+`;
+
+const Footer = styled('div')`
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px;
+  white-space: nowrap;
+`;
+
+const FooterLink = styled('a')`
+  color: ${colors.accent2};
+  cursor: pointer;
 `;
 
 const GitHubWrapper = styled('a')`

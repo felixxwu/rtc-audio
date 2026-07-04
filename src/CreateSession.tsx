@@ -1,4 +1,4 @@
-import { pc } from './pc.ts';
+import { enhanceAudioSdp, pc } from './pc.ts';
 import { firestore } from './firebase.ts';
 import { Button } from './Button.tsx';
 
@@ -16,24 +16,51 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
       if (event.candidate) offerCandidates.add(event.candidate.toJSON());
     };
 
-    // Create offer
-    const offerDescription = await pc.createOffer();
-    await pc.setLocalDescription(offerDescription);
+    const publishOffer = async (initial: boolean) => {
+      const offerDescription = await pc.createOffer();
+      if (offerDescription.sdp) {
+        offerDescription.sdp = enhanceAudioSdp(offerDescription.sdp);
+      }
+      await pc.setLocalDescription(offerDescription);
 
-    const offer = {
-      sdp: offerDescription.sdp,
-      type: offerDescription.type,
-      connected: false,
+      const offer = {
+        sdp: offerDescription.sdp,
+        type: offerDescription.type,
+        connected: false,
+      };
+
+      if (initial) await callDoc.set({ offer });
+      else await callDoc.update({ offer });
     };
 
-    await callDoc.set({ offer });
+    await publishOffer(true);
 
-    // Listen for remote answer
+    // Recover from drops: if ICE fails (or stays disconnected), restart it
+    // and publish a fresh offer for the joiner to re-answer.
+    let disconnectTimeout: NodeJS.Timeout | undefined;
+    const restart = () => {
+      pc.restartIce();
+      publishOffer(false).catch(console.error);
+    };
+    pc.oniceconnectionstatechange = () => {
+      clearTimeout(disconnectTimeout);
+      if (pc.iceConnectionState === 'failed') {
+        restart();
+      } else if (pc.iceConnectionState === 'disconnected') {
+        // 'disconnected' often self-heals; only restart if it persists.
+        disconnectTimeout = setTimeout(restart, 5000);
+      }
+    };
+
+    // Listen for remote answers, including re-answers after an ICE restart
     callDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
-      if (!pc.currentRemoteDescription && data?.answer) {
+      if (
+        data?.answer &&
+        data.answer.sdp !== pc.currentRemoteDescription?.sdp
+      ) {
         const answerDescription = new RTCSessionDescription(data.answer);
-        pc.setRemoteDescription(answerDescription);
+        pc.setRemoteDescription(answerDescription).catch(console.error);
       }
     });
 
@@ -42,7 +69,7 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const candidate = new RTCIceCandidate(change.doc.data());
-          pc.addIceCandidate(candidate);
+          pc.addIceCandidate(candidate).catch(console.error);
         }
       });
     });

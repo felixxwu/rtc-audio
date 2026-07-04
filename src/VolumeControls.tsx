@@ -1,8 +1,8 @@
 import {
   Icon,
-  // MicEmpty,
-  // MicFull,
-  // MicHalf,
+  MicEmpty,
+  MicFull,
+  MicHalf,
   SpeakerLoud,
   SpeakerMedium,
   SpeakerQuiet,
@@ -16,27 +16,29 @@ export const ICON_SIZE = 24;
 export const STEP = 0.05;
 
 export function VolumeControls() {
-  // const [micVolume, setMicVolume] = useState(1);
-  const [speakerVolume, setSpeakerVolume] = useState(1);
-
-  // useEffect(() => {
-  //   if (refs.gainNode) {
-  //     refs.gainNode.gain.value = micVolume;
-  //   }
-  // }, [micVolume]);
+  const [micVolume, setMicVolume] = useState(refs.micVolume);
+  const [speakerVolume, setSpeakerVolume] = useState(refs.speakerVolume);
 
   useEffect(() => {
+    refs.micVolume = micVolume;
+    if (refs.micGainNode) {
+      refs.micGainNode.gain.value = micVolume;
+    }
+  }, [micVolume]);
+
+  useEffect(() => {
+    refs.speakerVolume = speakerVolume;
     refs.audio.volume = speakerVolume;
   }, [speakerVolume]);
 
-  // const micIcon = [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];
+  const micIcon = [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];
   const speakerIcon = [SpeakerQuiet, SpeakerMedium, SpeakerLoud][
     Math.round(speakerVolume * 2)
   ];
 
-  // const handleMicIconClick = () => {
-  //   setMicVolume(micVolume === 0 ? 1 : 0);
-  // };
+  const handleMicIconClick = () => {
+    setMicVolume(micVolume === 0 ? 1 : 0);
+  };
 
   const handleSpeakerIconClick = () => {
     setSpeakerVolume(speakerVolume === 0 ? 1 : 0);
@@ -44,19 +46,19 @@ export function VolumeControls() {
 
   return (
     <>
-      {/*<Row>*/}
-      {/*  <IconWrapper onClick={handleMicIconClick}>*/}
-      {/*    <Icon path={micIcon} size={ICON_SIZE} color={colors.accent2} />*/}
-      {/*  </IconWrapper>*/}
-      {/*  <RangeInput*/}
-      {/*    type="range"*/}
-      {/*    value={micVolume}*/}
-      {/*    min={0}*/}
-      {/*    max={1}*/}
-      {/*    step={STEP}*/}
-      {/*    onChange={(e) => setMicVolume(Number(e.target.value))}*/}
-      {/*  />*/}
-      {/*</Row>*/}
+      <Row>
+        <IconWrapper onClick={handleMicIconClick}>
+          <Icon path={micIcon} size={ICON_SIZE} color={colors.accent2} />
+        </IconWrapper>
+        <RangeInput
+          type="range"
+          value={micVolume}
+          min={0}
+          max={1}
+          step={STEP}
+          onChange={(e) => setMicVolume(Number(e.target.value))}
+        />
+      </Row>
       <Row>
         <IconWrapper onClick={handleSpeakerIconClick}>
           <Icon path={speakerIcon} size={ICON_SIZE} color={colors.accent2} />

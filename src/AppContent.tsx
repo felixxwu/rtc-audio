@@ -16,7 +16,9 @@ export function AppContent() {
   const [id, setId] = useState('');
   const [connectionState, setConnectionState] =
     useState<RTCPeerConnectionState>('new');
-  const [newBytesReceived, setNewBytesReceived] = useState(0);
+  const [bitrateKbps, setBitrateKbps] = useState(0);
+  const [packetLossPercent, setPacketLossPercent] = useState(0);
+  const [jitterMs, setJitterMs] = useState(0);
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -26,11 +28,44 @@ export function AppContent() {
     const interval = setInterval(() => {
       setConnectionState(pc.connectionState);
       pc.getStats(null).then((stats) => {
-        const totalBytesReceived =
-          [...stats.values()].find((s) => s.type === 'transport')
-            ?.bytesReceived ?? refs.totalBytesReceived;
-        setNewBytesReceived(totalBytesReceived - refs.totalBytesReceived);
-        refs.totalBytesReceived = totalBytesReceived;
+        // inbound-rtp audio counts codec payload only and is supported in all
+        // browsers (unlike the transport stats type, missing in Firefox).
+        const inboundAudio = [...stats.values()].find(
+          (s) => s.type === 'inbound-rtp' && s.kind === 'audio'
+        );
+        if (!inboundAudio) return;
+
+        const {
+          bytesReceived,
+          timestamp,
+          packetsLost = 0,
+          packetsReceived = 0,
+          jitter = 0,
+        } = inboundAudio;
+        // Compute over the report's own timestamps — setInterval drifts and
+        // background tabs are throttled, so an assumed 1s interval spikes.
+        const elapsedMs = timestamp - refs.lastStatsTimestamp;
+        if (refs.lastStatsTimestamp > 0 && elapsedMs > 0) {
+          setBitrateKbps(
+            Math.max(
+              0,
+              Math.round(
+                ((bytesReceived - refs.totalBytesReceived) * 8) / elapsedMs
+              )
+            )
+          );
+          const newLost = Math.max(0, packetsLost - refs.lastPacketsLost);
+          const newReceived = packetsReceived - refs.lastPacketsReceived;
+          const newTotal = newLost + newReceived;
+          setPacketLossPercent(
+            newTotal > 0 ? Math.round((newLost / newTotal) * 100) : 0
+          );
+          setJitterMs(Math.round(jitter * 1000));
+        }
+        refs.totalBytesReceived = bytesReceived;
+        refs.lastStatsTimestamp = timestamp;
+        refs.lastPacketsLost = packetsLost;
+        refs.lastPacketsReceived = packetsReceived;
       });
     }, 1000);
 
@@ -103,8 +138,9 @@ export function AppContent() {
         <>
           <VolumeControls />
           <p>
-            Bitrate (incoming):{' '}
-            {Math.max(0, Math.round((newBytesReceived / 1000) * 8))} kb/s
+            Bitrate (incoming): {bitrateKbps} kb/s
+            <br />
+            Packet loss: {packetLossPercent}% | Jitter: {jitterMs} ms
           </p>
         </>
       )}
