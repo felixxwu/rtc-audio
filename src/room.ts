@@ -74,7 +74,7 @@ function createPeer(peerId: string) {
     pc,
     sender,
     audio,
-    stats: { bytes: 0, ts: 0, lost: 0, received: 0 },
+    stats: { bytes: 0, bytesSent: 0, ts: 0, lost: 0, received: 0 },
     unsubscribes: <(() => void)[]>[],
     // Remote ICE candidates can arrive (or already exist in Firestore)
     // before the remote description is set — adding them then throws and

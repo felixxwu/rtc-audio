@@ -16,6 +16,7 @@ export function AppContent() {
   const [id, setId] = useState('');
   const [connectedCount, setConnectedCount] = useState(0);
   const [bitrateKbps, setBitrateKbps] = useState(0);
+  const [outgoingKbps, setOutgoingKbps] = useState<number[]>([]);
   const [packetLossPercent, setPacketLossPercent] = useState(0);
   const [jitterMs, setJitterMs] = useState(0);
   const params = new URLSearchParams(document.location.search);
@@ -35,50 +36,79 @@ export function AppContent() {
       // own timestamps — setInterval drifts and background tabs are
       // throttled, so an assumed 1s interval spikes.
       let totalKbps = 0;
+      const outgoing: number[] = [];
       let worstLossPercent = 0;
       let worstJitterMs = 0;
       await Promise.all(
         peers.map(async (peer) => {
-          // inbound-rtp audio counts codec payload only and is supported in
-          // all browsers (unlike the transport stats type, missing in
-          // Firefox).
+          // inbound-rtp/outbound-rtp audio count codec payload only and are
+          // supported in all browsers (unlike the transport stats type,
+          // missing in Firefox).
           const stats = await peer.pc.getStats(null);
-          const inboundAudio = [...stats.values()].find(
+          const values = [...stats.values()];
+          const inboundAudio = values.find(
             (s) => s.type === 'inbound-rtp' && s.kind === 'audio'
           );
-          if (!inboundAudio) return;
+          const outboundAudio = values.find(
+            (s) => s.type === 'outbound-rtp' && s.kind === 'audio'
+          );
+          if (!inboundAudio && !outboundAudio) return;
 
-          const {
-            bytesReceived,
-            timestamp,
-            packetsLost = 0,
-            packetsReceived = 0,
-            jitter = 0,
-          } = inboundAudio;
+          const timestamp = (inboundAudio ?? outboundAudio).timestamp;
           const elapsedMs = timestamp - peer.stats.ts;
           if (peer.stats.ts > 0 && elapsedMs > 0) {
-            totalKbps += Math.max(
-              0,
-              Math.round(((bytesReceived - peer.stats.bytes) * 8) / elapsedMs)
-            );
-            const newLost = Math.max(0, packetsLost - peer.stats.lost);
-            const newReceived = packetsReceived - peer.stats.received;
-            const newTotal = newLost + newReceived;
-            if (newTotal > 0) {
-              worstLossPercent = Math.max(
-                worstLossPercent,
-                Math.round((newLost / newTotal) * 100)
+            if (inboundAudio) {
+              const {
+                bytesReceived,
+                packetsLost = 0,
+                packetsReceived = 0,
+                jitter = 0,
+              } = inboundAudio;
+              totalKbps += Math.max(
+                0,
+                Math.round(
+                  ((bytesReceived - peer.stats.bytes) * 8) / elapsedMs
+                )
+              );
+              const newLost = Math.max(0, packetsLost - peer.stats.lost);
+              const newReceived = packetsReceived - peer.stats.received;
+              const newTotal = newLost + newReceived;
+              if (newTotal > 0) {
+                worstLossPercent = Math.max(
+                  worstLossPercent,
+                  Math.round((newLost / newTotal) * 100)
+                );
+              }
+              worstJitterMs = Math.max(
+                worstJitterMs,
+                Math.round(jitter * 1000)
               );
             }
-            worstJitterMs = Math.max(worstJitterMs, Math.round(jitter * 1000));
+            if (outboundAudio) {
+              outgoing.push(
+                Math.max(
+                  0,
+                  Math.round(
+                    ((outboundAudio.bytesSent - peer.stats.bytesSent) * 8) /
+                      elapsedMs
+                  )
+                )
+              );
+            }
           }
-          peer.stats.bytes = bytesReceived;
           peer.stats.ts = timestamp;
-          peer.stats.lost = packetsLost;
-          peer.stats.received = packetsReceived;
+          if (inboundAudio) {
+            peer.stats.bytes = inboundAudio.bytesReceived;
+            peer.stats.lost = inboundAudio.packetsLost ?? 0;
+            peer.stats.received = inboundAudio.packetsReceived ?? 0;
+          }
+          if (outboundAudio) {
+            peer.stats.bytesSent = outboundAudio.bytesSent;
+          }
         })
       );
       setBitrateKbps(totalKbps);
+      setOutgoingKbps(outgoing);
       setPacketLossPercent(worstLossPercent);
       setJitterMs(worstJitterMs);
     }, 1000);
@@ -151,6 +181,10 @@ export function AppContent() {
           <ShareAudioControls />
           <p>
             Bitrate (incoming): {bitrateKbps} kb/s
+            <br />
+            Bitrate (outgoing):{' '}
+            {outgoingKbps.reduce((sum, kbps) => sum + kbps, 0)} kb/s
+            {outgoingKbps.length > 1 && ` (${outgoingKbps.join(' + ')})`}
             <br />
             Packet loss: {packetLossPercent}% | Jitter: {jitterMs} ms
           </p>

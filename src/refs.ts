@@ -4,7 +4,13 @@ export type Peer = {
   audio: HTMLAudioElement;
   // Per-connection stats deltas (bitrate/loss/jitter are computed from the
   // previous report, per pc).
-  stats: { bytes: number; ts: number; lost: number; received: number };
+  stats: {
+    bytes: number;
+    bytesSent: number;
+    ts: number;
+    lost: number;
+    received: number;
+  };
   unsubscribes: (() => void)[];
   // Remote ICE candidates that arrived before the remote description was
   // set; flushed right after it is.
