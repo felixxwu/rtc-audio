@@ -3,6 +3,7 @@ import { firestore } from './firebase.ts';
 import { enhanceAudioSdp, servers } from './pc.ts';
 import { refs, type Peer } from './refs.ts';
 import { updateTransmission } from './transmission.ts';
+import { keepAwake } from './wakeLock.ts';
 
 // Lives for the lifetime of the tab; a rejoin after reload is a new peer.
 export const myPeerId = crypto.randomUUID();
@@ -277,6 +278,8 @@ export async function joinRoom(
   await peersCol.doc(myPeerId).set({
     joinedAt: firebase.firestore.FieldValue.serverTimestamp(),
   });
+
+  keepAwake();
 
   // Offerer rule (glare avoidance): for any pair, the peer already in the
   // room offers to the newcomer — i.e. we offer to peers whose joinedAt is
