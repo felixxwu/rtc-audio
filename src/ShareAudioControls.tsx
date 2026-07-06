@@ -11,6 +11,7 @@ import {
   stopShareAudio,
 } from './shareAudio.ts';
 import { updateTransmission } from './transmission.ts';
+import { saveVolume } from './volumeStorage.ts';
 
 export function ShareAudioControls() {
   const [sharing, setSharing] = useState(
@@ -24,6 +25,7 @@ export function ShareAudioControls() {
     if (refs.shareGainNode) {
       refs.shareGainNode.gain.value = shareVolume;
     }
+    saveVolume('share', shareVolume);
     updateTransmission();
   }, [shareVolume]);
 

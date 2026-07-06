@@ -30,3 +30,8 @@ dist-ssr
 *.local
 /.idea/
 specs/*.md
+
+# Firebase service-account keys — never commit
+service-account.json
+*-service-account.json
+*serviceaccount*.json

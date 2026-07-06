@@ -12,6 +12,7 @@ import styled from 'styled-components';
 import { useEffect, useState } from 'react';
 import { refs } from './refs.ts';
 import { updateTransmission } from './transmission.ts';
+import { saveVolume } from './volumeStorage.ts';
 
 export const ICON_SIZE = 24;
 export const STEP = 0.05;
@@ -25,6 +26,7 @@ export function VolumeControls() {
     if (refs.micGainNode) {
       refs.micGainNode.gain.value = micVolume;
     }
+    saveVolume('mic', micVolume);
     updateTransmission();
   }, [micVolume]);
 
@@ -33,6 +35,7 @@ export function VolumeControls() {
     refs.peers.forEach((peer) => {
       peer.audio.volume = speakerVolume;
     });
+    saveVolume('speaker', speakerVolume);
   }, [speakerVolume]);
 
   const micIcon = [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];

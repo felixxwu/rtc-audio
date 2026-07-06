@@ -6,6 +6,8 @@ import { PlayingIcon } from './PlayingIcon.tsx';
 import { VolumeControls } from './VolumeControls.tsx';
 import { ShareAudioControls } from './ShareAudioControls.tsx';
 import { StreamViewer } from './StreamViewer.tsx';
+import { FileControls } from './FileControls.tsx';
+import { BrowserNotice } from './BrowserNotice.tsx';
 import styled from 'styled-components';
 import { colors } from './colors.ts';
 import { refs } from './refs.ts';
@@ -18,6 +20,8 @@ export function AppContent() {
   const [connectedCount, setConnectedCount] = useState(0);
   const [bitrateKbps, setBitrateKbps] = useState(0);
   const [outgoingKbps, setOutgoingKbps] = useState<number[]>([]);
+  const [totalInKbps, setTotalInKbps] = useState(0);
+  const [totalOutKbps, setTotalOutKbps] = useState(0);
   const [packetLossPercent, setPacketLossPercent] = useState(0);
   const [jitterMs, setJitterMs] = useState(0);
   const params = new URLSearchParams(document.location.search);
@@ -38,13 +42,21 @@ export function AppContent() {
       // throttled, so an assumed 1s interval spikes.
       let totalKbps = 0;
       const outgoing: number[] = [];
+      let videoInKbps = 0;
+      let videoOutKbps = 0;
+      let dataInKbps = 0;
+      let dataOutKbps = 0;
       let worstLossPercent = 0;
       let worstJitterMs = 0;
       await Promise.all(
         peers.map(async (peer) => {
           // inbound-rtp/outbound-rtp audio count codec payload only and are
           // supported in all browsers (unlike the transport stats type,
-          // missing in Firefox).
+          // missing in Firefox). Video (screen share) is the same stat with
+          // kind 'video'. File transfer runs on the data channels, reported
+          // separately under 'data-channel' — summed here so Total reflects
+          // everything on the wire (payload level, excluding protocol
+          // overhead).
           const stats = await peer.pc.getStats(null);
           const values = [...stats.values()];
           const inboundAudio = values.find(
@@ -53,6 +65,22 @@ export function AppContent() {
           const outboundAudio = values.find(
             (s) => s.type === 'outbound-rtp' && s.kind === 'audio'
           );
+          const inboundVideo = values.find(
+            (s) => s.type === 'inbound-rtp' && s.kind === 'video'
+          );
+          const outboundVideo = values.find(
+            (s) => s.type === 'outbound-rtp' && s.kind === 'video'
+          );
+          // Both data channels (cursors + files) summed; cursor traffic is
+          // negligible next to a transfer.
+          let dataBytesReceived = 0;
+          let dataBytesSent = 0;
+          for (const s of values) {
+            if (s.type === 'data-channel') {
+              dataBytesReceived += s.bytesReceived ?? 0;
+              dataBytesSent += s.bytesSent ?? 0;
+            }
+          }
           if (!inboundAudio && !outboundAudio) return;
 
           const timestamp = (inboundAudio ?? outboundAudio).timestamp;
@@ -96,6 +124,36 @@ export function AppContent() {
                 )
               );
             }
+            if (inboundVideo) {
+              videoInKbps += Math.max(
+                0,
+                Math.round(
+                  ((inboundVideo.bytesReceived - peer.stats.videoBytes) * 8) /
+                    elapsedMs
+                )
+              );
+            }
+            if (outboundVideo) {
+              videoOutKbps += Math.max(
+                0,
+                Math.round(
+                  ((outboundVideo.bytesSent - peer.stats.videoBytesSent) * 8) /
+                    elapsedMs
+                )
+              );
+            }
+            dataInKbps += Math.max(
+              0,
+              Math.round(
+                ((dataBytesReceived - peer.stats.dataBytes) * 8) / elapsedMs
+              )
+            );
+            dataOutKbps += Math.max(
+              0,
+              Math.round(
+                ((dataBytesSent - peer.stats.dataBytesSent) * 8) / elapsedMs
+              )
+            );
           }
           peer.stats.ts = timestamp;
           if (inboundAudio) {
@@ -106,10 +164,22 @@ export function AppContent() {
           if (outboundAudio) {
             peer.stats.bytesSent = outboundAudio.bytesSent;
           }
+          if (inboundVideo) peer.stats.videoBytes = inboundVideo.bytesReceived;
+          if (outboundVideo) {
+            peer.stats.videoBytesSent = outboundVideo.bytesSent;
+          }
+          peer.stats.dataBytes = dataBytesReceived;
+          peer.stats.dataBytesSent = dataBytesSent;
         })
       );
       setBitrateKbps(totalKbps);
       setOutgoingKbps(outgoing);
+      setTotalInKbps(totalKbps + videoInKbps + dataInKbps);
+      setTotalOutKbps(
+        outgoing.reduce((sum, kbps) => sum + kbps, 0) +
+          videoOutKbps +
+          dataOutKbps
+      );
       setPacketLossPercent(worstLossPercent);
       setJitterMs(worstJitterMs);
     }, 1000);
@@ -176,6 +246,7 @@ export function AppContent() {
 
   return (
     <>
+      <BrowserNotice />
       {connectedCount > 0 && <PlayingIcon />}
       <p>
         {connectedCount === 0
@@ -194,12 +265,13 @@ export function AppContent() {
           <VolumeControls />
           <ShareAudioControls />
           <StreamViewer />
+          <FileControls />
           <p>
-            Bitrate (incoming): {bitrateKbps} kb/s
+            Audio ↓ {bitrateKbps} ↑{' '}
+            {outgoingKbps.reduce((sum, kbps) => sum + kbps, 0)}
+            {outgoingKbps.length > 1 && ` (${outgoingKbps.join(' + ')})`} kb/s
             <br />
-            Bitrate (outgoing):{' '}
-            {outgoingKbps.reduce((sum, kbps) => sum + kbps, 0)} kb/s
-            {outgoingKbps.length > 1 && ` (${outgoingKbps.join(' + ')})`}
+            Total ↓ {totalInKbps} ↑ {totalOutKbps} kb/s
             <br />
             Packet loss: {packetLossPercent}% | Jitter: {jitterMs} ms
           </p>

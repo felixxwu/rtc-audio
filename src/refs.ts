@@ -1,4 +1,5 @@
 import type firebase from 'firebase/app';
+import { loadVolume } from './volumeStorage.ts';
 
 export type Peer = {
   pc: RTCPeerConnection;
@@ -8,6 +9,8 @@ export type Peer = {
   videoSender: RTCRtpSender;
   // Per-pair channel carrying collaborative-pointer positions.
   cursorChannel: RTCDataChannel;
+  // Per-pair reliable, ordered channel for file transfers.
+  fileChannel: RTCDataChannel;
   videoStream: MediaStream | null;
   // Whether the remote peer asked to watch our shared screen.
   remoteWatching: boolean;
@@ -18,6 +21,10 @@ export type Peer = {
   stats: {
     bytes: number;
     bytesSent: number;
+    videoBytes: number;
+    videoBytesSent: number;
+    dataBytes: number;
+    dataBytesSent: number;
     ts: number;
     lost: number;
     received: number;
@@ -28,8 +35,58 @@ export type Peer = {
   pendingCandidates: RTCIceCandidateInit[];
 };
 
+// Minimal shape of a File System Access writable stream — declared locally
+// so we don't depend on the API being in the TS lib.
+export interface FileWritable {
+  write(data: ArrayBuffer): Promise<void>;
+  close(): Promise<void>;
+  abort(): Promise<void>;
+}
+
+export interface IncomingFile {
+  from: string;
+  id: string;
+  name: string;
+  size: number;
+  mime: string;
+  received: number;
+  // In-memory fallback buffers (used only when streaming-to-disk isn't
+  // available); empty when writing straight to disk.
+  chunks: ArrayBuffer[];
+  // When set, chunks stream to disk instead of accumulating in `chunks`.
+  writable?: FileWritable | null;
+  // Serialises disk writes in arrival order across async onmessage events.
+  writeChain?: Promise<void>;
+  status: 'offered' | 'accepted' | 'receiving' | 'done' | 'failed';
+  // Local arrival order, for newest-first display.
+  seq: number;
+}
+
+export interface OutgoingPeerState {
+  status: 'offered' | 'queued' | 'sending' | 'done' | 'declined' | 'failed';
+  sent: number;
+}
+
+export interface OutgoingFile {
+  id: string;
+  name: string;
+  size: number;
+  file: File;
+  perPeer: Map<string, OutgoingPeerState>;
+  // Local creation order, for newest-first display.
+  seq: number;
+}
+
 export const refs = {
   peers: new Map<string, Peer>(),
+  // Incoming file transfers keyed by `${fromPeerId}:${transferId}`.
+  incomingFiles: new Map<string, IncomingFile>(),
+  // Which incoming transfer is currently receiving binary chunks from each
+  // peer (one active transfer per pair in v1).
+  activeIncoming: new Map<string, string>(),
+  // Outgoing transfers we've offered, keyed by transferId. Multiple can be
+  // offered at once; sends to a given peer are serialised (one uplink).
+  outgoingFiles: new Map<string, OutgoingFile>(),
   audioContext: <AudioContext | null>null,
   gainNode: <GainNode | null>null,
   micGainNode: <GainNode | null>null,
@@ -48,10 +105,11 @@ export const refs = {
   // resolve exclusive sharing: the most recent share wins.
   mySharingSince: 0,
   // Volume slider values live here so they survive VolumeControls
-  // unmounting when the connection drops and reconnects.
-  micVolume: 1,
-  shareVolume: 1,
-  speakerVolume: 1,
+  // unmounting when the connection drops and reconnects. Seeded from
+  // localStorage so they also survive across sessions.
+  micVolume: loadVolume('mic'),
+  shareVolume: loadVolume('share'),
+  speakerVolume: loadVolume('speaker'),
 };
 
 // Debug handle for poking at connections from the console in dev.

@@ -6,11 +6,29 @@ import { updateTransmission } from './transmission.ts';
 import { keepAwake } from './wakeLock.ts';
 import { cursors, handleCursorMessage } from './cursors.ts';
 import { forceStopShare } from './shareAudio.ts';
+import {
+  handleFileMessage,
+  peerDisconnected,
+  reofferTo,
+} from './fileTransfer.ts';
 
 // Lives for the lifetime of the tab; a rejoin after reload is a new peer.
 export const myPeerId = crypto.randomUUID();
 
 const MAX_RESTARTS = 3;
+// Presence heartbeat: each peer refreshes lastSeen this often; a peer whose
+// lastSeen falls this far behind ours (and whose connection isn't live) is
+// treated as gone. The threshold tolerates a couple of missed beats.
+const HEARTBEAT_MS = 15000;
+const STALE_MS = 35000;
+let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+
+// Firestore TTL cleanup: every doc is stamped with expireAt so stale session
+// data self-deletes (enable a TTL policy on the `expireAt` field for each
+// collection group in the Firebase console). The window is far longer than
+// any real session; presence docs refresh it on each heartbeat.
+const TTL_MS = 24 * 60 * 60 * 1000;
+const expireAt = () => new Date(Date.now() + TTL_MS);
 
 type Timestamp = firebase.firestore.Timestamp;
 type DocRef = firebase.firestore.DocumentReference;
@@ -81,6 +99,19 @@ function createPeer(peerId: string) {
   });
   cursorChannel.onmessage = (event) => handleCursorMessage(peerId, event.data);
 
+  // Reliable, ordered channel for file transfers (id 1). arraybuffer so
+  // binary chunks arrive as ArrayBuffer rather than Blob.
+  const fileChannel = pc.createDataChannel('files', {
+    negotiated: true,
+    id: 1,
+    ordered: true,
+  });
+  fileChannel.binaryType = 'arraybuffer';
+  fileChannel.onmessage = (event) => handleFileMessage(peerId, event.data);
+  // A peer that connects after a file was offered gets the still-pending
+  // offers once its channel opens.
+  fileChannel.onopen = () => reofferTo(peerId);
+
   const audio = new Audio();
   audio.autoplay = true;
   // Inherit the current slider value — a peer joining after the speaker was
@@ -108,11 +139,22 @@ function createPeer(peerId: string) {
     sender,
     videoSender,
     cursorChannel,
+    fileChannel,
     videoStream: <MediaStream | null>null,
     remoteWatching: false,
     connDoc: <firebase.firestore.DocumentReference | null>null,
     audio,
-    stats: { bytes: 0, bytesSent: 0, ts: 0, lost: 0, received: 0 },
+    stats: {
+      bytes: 0,
+      bytesSent: 0,
+      videoBytes: 0,
+      videoBytesSent: 0,
+      dataBytes: 0,
+      dataBytesSent: 0,
+      ts: 0,
+      lost: 0,
+      received: 0,
+    },
     unsubscribes: <(() => void)[]>[],
     // Remote ICE candidates can arrive (or already exist in Firestore)
     // before the remote description is set — adding them then throws and
@@ -199,6 +241,7 @@ export function closePeer(peerId: string) {
   entry.audio.srcObject = null;
   refs.peers.delete(peerId);
   cursors.delete(peerId);
+  peerDisconnected(peerId);
 }
 
 // Offerer side of one pair: publish (and republish after ICE restarts) the
@@ -214,7 +257,10 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
 
   entry.pc.onicecandidate = (event) => {
     if (event.candidate) {
-      connDoc.collection('offerCandidates').add(event.candidate.toJSON());
+      connDoc.collection('offerCandidates').add({
+        ...event.candidate.toJSON(),
+        expireAt: expireAt(),
+      });
     }
   };
 
@@ -230,7 +276,12 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
 
     const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
     if (initial) {
-      await connDoc.set({ offererId: myPeerId, answererId: peerId, offer });
+      await connDoc.set({
+        offererId: myPeerId,
+        answererId: peerId,
+        offer,
+        expireAt: expireAt(),
+      });
     } else {
       await connDoc.update({ offer });
     }
@@ -320,7 +371,10 @@ async function answerOffer(
     entry.connDoc = connDoc;
     entry.pc.onicecandidate = (event) => {
       if (event.candidate) {
-        connDoc.collection('answerCandidates').add(event.candidate.toJSON());
+        connDoc.collection('answerCandidates').add({
+          ...event.candidate.toJSON(),
+          expireAt: expireAt(),
+        });
       }
     };
     const knownEntry = entry;
@@ -367,6 +421,7 @@ export async function joinRoom(
   if (create) {
     await roomDoc.set({
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      expireAt: expireAt(),
     });
   } else {
     // Rooms are ephemeral: a room everyone has left is not joinable.
@@ -378,6 +433,26 @@ export async function joinRoom(
   await myPresenceDoc.set({
     joinedAt: firebase.firestore.FieldValue.serverTimestamp(),
     sharing: false,
+    lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+    expireAt: expireAt(),
+  });
+
+  // Heartbeat so others can tell a live-but-quiet peer from a vanished one.
+  // Every heartbeat write also re-fires everyone's peers snapshot, which is
+  // where the stale-peer GC below runs.
+  const heartbeat = () => {
+    myPresenceDoc
+      ?.update({
+        lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+        expireAt: expireAt(),
+      })
+      .catch(() => {});
+  };
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+  // Beat immediately on return to foreground, before others' GC can fire.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') heartbeat();
   });
 
   keepAwake();
@@ -393,6 +468,33 @@ export async function joinRoom(
         closePeer(change.doc.id);
       }
     });
+
+    // Ghost GC: a peer whose heartbeat has gone stale AND whose connection to
+    // us isn't live is gone — delete its presence doc (which converges the
+    // whole room via the 'removed' handler above) and drop it locally. The
+    // connection guard spares a merely-backgrounded peer whose timer is
+    // throttled but whose transport is still up. Compared against our own
+    // lastSeen (both server timestamps) to avoid client-clock skew.
+    const evicted = new Set<string>();
+    const myLastSeen = snapshot.docs
+      .find((doc) => doc.id === myPeerId)
+      ?.data().lastSeen as Timestamp | null | undefined;
+    if (myLastSeen) {
+      for (const doc of snapshot.docs) {
+        if (doc.id === myPeerId) continue;
+        const theirLastSeen = doc.data().lastSeen as Timestamp | null;
+        if (!theirLastSeen) continue;
+        const stale =
+          myLastSeen.toMillis() - theirLastSeen.toMillis() > STALE_MS;
+        const live =
+          refs.peers.get(doc.id)?.pc.connectionState === 'connected';
+        if (stale && !live) {
+          peersCol.doc(doc.id).delete().catch(() => {});
+          closePeer(doc.id);
+          evicted.add(doc.id);
+        }
+      }
+    }
 
     refs.sharingPeers = new Set(
       snapshot.docs
@@ -422,7 +524,10 @@ export async function joinRoom(
     if (!myJoinedAt) return;
 
     for (const doc of snapshot.docs) {
-      if (doc.id === myPeerId || refs.peers.has(doc.id)) continue;
+      // Skip peers we just evicted this pass — their doc is still present
+      // until the delete propagates, and we mustn't re-offer to a ghost.
+      if (doc.id === myPeerId || refs.peers.has(doc.id) || evicted.has(doc.id))
+        continue;
       const joinedAt = doc.data().joinedAt as Timestamp | null;
       if (!joinedAt) continue;
 
