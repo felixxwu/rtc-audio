@@ -5,6 +5,7 @@ import { CreateSession } from './CreateSession.tsx';
 import { PlayingIcon } from './PlayingIcon.tsx';
 import { VolumeControls } from './VolumeControls.tsx';
 import { ShareAudioControls } from './ShareAudioControls.tsx';
+import { StreamViewer } from './StreamViewer.tsx';
 import styled from 'styled-components';
 import { colors } from './colors.ts';
 import { refs } from './refs.ts';
@@ -192,6 +193,7 @@ export function AppContent() {
         <>
           <VolumeControls />
           <ShareAudioControls />
+          <StreamViewer />
           <p>
             Bitrate (incoming): {bitrateKbps} kb/s
             <br />

@@ -13,7 +13,9 @@ import {
 import { updateTransmission } from './transmission.ts';
 
 export function ShareAudioControls() {
-  const [sharing, setSharing] = useState(refs.shareStream !== null);
+  const [sharing, setSharing] = useState(
+    refs.shareStream !== null || refs.shareVideoTrack !== null
+  );
   const [shareVolume, setShareVolume] = useState(refs.shareVolume);
   const [hint, setHint] = useState('');
 
@@ -33,8 +35,8 @@ export function ShareAudioControls() {
     } catch (e) {
       if (e instanceof NoAudioTrackError) {
         setHint(
-          'No audio in the selected source. Pick a tab or window and tick ' +
-            '"Also share audio" in the dialog.'
+          'Nothing to share from the selected source. For audio, pick a ' +
+            'tab or window and tick "Also share audio" in the dialog.'
         );
       } else if ((e as Error).name !== 'NotAllowedError') {
         // NotAllowedError is the user cancelling the picker — not an error.
@@ -53,7 +55,7 @@ export function ShareAudioControls() {
     return (
       <>
         <p>
-          <Button onClick={handleShare}>Share tab/window audio</Button>
+          <Button onClick={handleShare}>Share tab/window</Button>
         </p>
         {hint && <Hint>{hint}</Hint>}
       </>
@@ -62,19 +64,21 @@ export function ShareAudioControls() {
 
   return (
     <>
-      <Row>
-        <Icon path={MusicNote} size={ICON_SIZE} color={colors.accent2} />
-        <RangeInput
-          type="range"
-          value={shareVolume}
-          min={0}
-          max={1}
-          step={STEP}
-          onChange={(e) => setShareVolume(Number(e.target.value))}
-        />
-      </Row>
+      {refs.shareStream !== null && (
+        <Row>
+          <Icon path={MusicNote} size={ICON_SIZE} color={colors.accent2} />
+          <RangeInput
+            type="range"
+            value={shareVolume}
+            min={0}
+            max={1}
+            step={STEP}
+            onChange={(e) => setShareVolume(Number(e.target.value))}
+          />
+        </Row>
+      )}
       <p>
-        <Button onClick={handleStop}>Stop sharing audio</Button>
+        <Button onClick={handleStop}>Stop sharing</Button>
       </p>
     </>
   );

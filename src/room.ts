@@ -4,6 +4,8 @@ import { enhanceAudioSdp, servers } from './pc.ts';
 import { refs, type Peer } from './refs.ts';
 import { updateTransmission } from './transmission.ts';
 import { keepAwake } from './wakeLock.ts';
+import { cursors, handleCursorMessage } from './cursors.ts';
+import { forceStopShare } from './shareAudio.ts';
 
 // Lives for the lifetime of the tab; a rejoin after reload is a new peer.
 export const myPeerId = crypto.randomUUID();
@@ -60,6 +62,25 @@ function createPeer(peerId: string) {
     if (preferred.length) transceiver.setCodecPreferences(preferred);
   });
 
+  // Idle video channel for on-demand screen sharing. Negotiated up front
+  // (costs nothing while unused) so starting video for one viewer later is
+  // replaceTrack on this pair only — no renegotiation, no other pairs
+  // spending bandwidth.
+  const videoSender = pc.addTransceiver('video', {
+    direction: 'sendrecv',
+  }).sender;
+
+  // Collaborative-pointer channel, negotiated up front with a fixed id so
+  // both sides open it without renegotiation. Unreliable + unordered: a
+  // cursor position is stale the instant the next one is sent.
+  const cursorChannel = pc.createDataChannel('cursors', {
+    negotiated: true,
+    id: 0,
+    ordered: false,
+    maxRetransmits: 0,
+  });
+  cursorChannel.onmessage = (event) => handleCursorMessage(peerId, event.data);
+
   const audio = new Audio();
   audio.autoplay = true;
   // Inherit the current slider value — a peer joining after the speaker was
@@ -67,6 +88,10 @@ function createPeer(peerId: string) {
   audio.volume = refs.speakerVolume;
 
   pc.ontrack = (event) => {
+    if (event.track.kind === 'video') {
+      entry.videoStream = new MediaStream([event.track]);
+      return;
+    }
     // Prefer stability over latency: buffer up to 500ms rather than glitch
     // on jitter — right trade-off for one-way music streaming.
     if ('jitterBufferTarget' in event.receiver) {
@@ -81,6 +106,11 @@ function createPeer(peerId: string) {
   const entry = {
     pc,
     sender,
+    videoSender,
+    cursorChannel,
+    videoStream: <MediaStream | null>null,
+    remoteWatching: false,
+    connDoc: <firebase.firestore.DocumentReference | null>null,
     audio,
     stats: { bytes: 0, bytesSent: 0, ts: 0, lost: 0, received: 0 },
     unsubscribes: <(() => void)[]>[],
@@ -94,6 +124,56 @@ function createPeer(peerId: string) {
   // detached, like everyone else's.
   updateTransmission();
   return entry;
+}
+
+// Attach the shared screen track to exactly the pairs whose remote peer
+// asked to watch; detach everywhere else. Screen content: cap the bitrate
+// and prefer sharp text over frame rate.
+export function updateVideoTransmission() {
+  for (const entry of refs.peers.values()) {
+    const track =
+      entry.remoteWatching && refs.shareVideoTrack
+        ? refs.shareVideoTrack
+        : null;
+    if (entry.videoSender.track === track) continue;
+    entry.videoSender.replaceTrack(track).catch(console.error);
+    if (track) {
+      const params = entry.videoSender.getParameters();
+      params.degradationPreference = 'maintain-resolution';
+      params.encodings.forEach((encoding) => {
+        encoding.maxBitrate = 500_000;
+      });
+      entry.videoSender.setParameters(params).catch(console.error);
+    }
+  }
+}
+
+// Ask (or stop asking) `peerId` to send us their shared screen.
+export function setWatching(peerId: string, watching: boolean) {
+  refs.peers
+    .get(peerId)
+    ?.connDoc?.update({ [`watching.${myPeerId}`]: watching })
+    .catch(console.error);
+}
+
+let myPresenceDoc: firebase.firestore.DocumentReference | null = null;
+
+// Advertise on our presence doc that a screen share is available to watch,
+// stamped with when it started so the most recent share wins.
+export function setSharingPresence(sharing: boolean) {
+  refs.mySharingSince = sharing ? Date.now() : 0;
+  myPresenceDoc
+    ?.update({ sharing, sharingSince: refs.mySharingSince })
+    .catch(console.error);
+}
+
+function applyRemoteWatching(
+  entry: Peer,
+  data: firebase.firestore.DocumentData,
+  remotePeerId: string
+) {
+  entry.remoteWatching = !!data.watching?.[remotePeerId];
+  updateVideoTransmission();
 }
 
 function addRemoteCandidate(entry: Peer, data: RTCIceCandidateInit) {
@@ -118,6 +198,7 @@ export function closePeer(peerId: string) {
   entry.pc.close();
   entry.audio.srcObject = null;
   refs.peers.delete(peerId);
+  cursors.delete(peerId);
 }
 
 // Offerer side of one pair: publish (and republish after ICE restarts) the
@@ -129,6 +210,7 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
   const entry = createPeer(peerId);
   // Both sides derive this ID without coordination.
   const connDoc = connectionsCol.doc(`${myPeerId}_${peerId}`);
+  entry.connDoc = connDoc;
 
   entry.pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -201,8 +283,10 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
     // Remote answers, including re-answers after an ICE restart.
     connDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
+      if (!data) return;
+      applyRemoteWatching(entry, data, peerId);
       if (
-        data?.answer &&
+        data.answer &&
         data.answer.sdp !== entry.pc.currentRemoteDescription?.sdp
       ) {
         entry.pc
@@ -233,6 +317,7 @@ async function answerOffer(
   let entry = refs.peers.get(offererId);
   if (!entry) {
     entry = createPeer(offererId);
+    entry.connDoc = connDoc;
     entry.pc.onicecandidate = (event) => {
       if (event.candidate) {
         connDoc.collection('answerCandidates').add(event.candidate.toJSON());
@@ -289,8 +374,10 @@ export async function joinRoom(
     if (existingPeers.empty) return 'Session not found';
   }
 
-  await peersCol.doc(myPeerId).set({
+  myPresenceDoc = peersCol.doc(myPeerId);
+  await myPresenceDoc.set({
     joinedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    sharing: false,
   });
 
   keepAwake();
@@ -306,6 +393,28 @@ export async function joinRoom(
         closePeer(change.doc.id);
       }
     });
+
+    refs.sharingPeers = new Set(
+      snapshot.docs
+        .filter((doc) => doc.id !== myPeerId && doc.data().sharing)
+        .map((doc) => doc.id)
+    );
+
+    // Exclusive screen sharing: if another peer's share is newer than ours,
+    // stop ours so the newcomer's is the only one. Ties break on peerId so
+    // both sides agree on who yields.
+    if (refs.shareVideoTrack) {
+      const superseded = snapshot.docs.some((doc) => {
+        const data = doc.data();
+        if (doc.id === myPeerId || !data.sharing) return false;
+        const theirs = data.sharingSince ?? 0;
+        return (
+          theirs > refs.mySharingSince ||
+          (theirs === refs.mySharingSince && doc.id < myPeerId)
+        );
+      });
+      if (superseded) forceStopShare();
+    }
 
     const myJoinedAt = snapshot.docs
       .find((doc) => doc.id === myPeerId)
@@ -336,6 +445,8 @@ export async function joinRoom(
         if (change.type === 'removed') return;
         const data = change.doc.data();
         const offererId = data.offererId as string;
+        const known = refs.peers.get(offererId);
+        if (known) applyRemoteWatching(known, data, offererId);
         if (
           !data.offer?.sdp ||
           answeredOfferSdp.get(offererId) === data.offer.sdp
