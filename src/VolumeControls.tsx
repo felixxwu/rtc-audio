@@ -11,6 +11,7 @@ import { colors } from './colors.ts';
 import styled from 'styled-components';
 import { useEffect, useState } from 'react';
 import { refs } from './refs.ts';
+import { updateTransmission } from './transmission.ts';
 
 export const ICON_SIZE = 24;
 export const STEP = 0.05;
@@ -24,23 +25,14 @@ export function VolumeControls() {
     if (refs.micGainNode) {
       refs.micGainNode.gain.value = micVolume;
     }
-    // At zero, stop transmitting entirely instead of sending encoded
-    // silence — frees the full upstream (CBR + RED never dips on quiet
-    // audio), which helps the incoming stream on weak connections.
-    if (refs.micSender) {
-      const shouldSend = micVolume > 0;
-      const isSending = refs.micSender.track !== null;
-      if (shouldSend !== isSending) {
-        refs.micSender
-          .replaceTrack(shouldSend ? refs.micTrack : null)
-          .catch(console.error);
-      }
-    }
+    updateTransmission();
   }, [micVolume]);
 
   useEffect(() => {
     refs.speakerVolume = speakerVolume;
-    refs.audio.volume = speakerVolume;
+    refs.peers.forEach((peer) => {
+      peer.audio.volume = speakerVolume;
+    });
   }, [speakerVolume]);
 
   const micIcon = [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];

@@ -1,4 +1,4 @@
-const servers = {
+export const servers = {
   iceServers: [
     {
       urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
@@ -7,20 +7,26 @@ const servers = {
   iceCandidatePoolSize: 20,
 };
 
-export const pc = new RTCPeerConnection(servers);
+// Upload cost in a mesh is one stream per other peer, so scale the ask down
+// as the room grows. Room size is taken at offer time; existing pairs keep
+// their old rate until they reconnect (renegotiation on growth is a fast
+// follow, not v1).
+const bitrateForRoomSize = (size: number) =>
+  size <= 2 ? 510000 : size <= 4 ? 256000 : 128000;
 
-// Ask the remote peer to send stereo Opus at the highest bitrate the spec
-// allows (510 kbps — browsers clamp anything above it). Must be applied to
-// both the offer and the answer so both directions get high quality.
+// Ask the remote peer to send stereo Opus at the highest bitrate the room
+// size allows (510 kbps is the spec ceiling — browsers clamp anything above
+// it). Must be applied to both the offer and the answer so both directions
+// get high quality.
 //
 // Rather than assuming a particular fmtp string exists (browsers differ),
 // find every Opus payload type via its rtpmap line, then upsert the desired
 // parameters into that payload's fmtp line — creating the line if absent.
-export function enhanceAudioSdp(sdp: string): string {
+export function enhanceAudioSdp(sdp: string, roomSize = 2): string {
   const params: Record<string, string> = {
     stereo: '1',
     'sprop-stereo': '1',
-    maxaveragebitrate: '510000',
+    maxaveragebitrate: String(bitrateForRoomSize(roomSize)),
     maxplaybackrate: '48000',
     useinbandfec: '1',
     // Constant bitrate: hold max quality through quiet passages instead of

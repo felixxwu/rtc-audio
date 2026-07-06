@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { pc } from './pc.ts';
-import { joinSession } from './joinSession.ts';
+import { joinRoom } from './room.ts';
 import { EnableAudio } from './EnableAudio.tsx';
 import { CreateSession } from './CreateSession.tsx';
 import { PlayingIcon } from './PlayingIcon.tsx';
 import { VolumeControls } from './VolumeControls.tsx';
+import { ShareAudioControls } from './ShareAudioControls.tsx';
 import styled from 'styled-components';
 import { colors } from './colors.ts';
 import { refs } from './refs.ts';
@@ -14,8 +14,7 @@ export function AppContent() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [error, setError] = useState('');
   const [id, setId] = useState('');
-  const [connectionState, setConnectionState] =
-    useState<RTCPeerConnectionState>('new');
+  const [connectedCount, setConnectedCount] = useState(0);
   const [bitrateKbps, setBitrateKbps] = useState(0);
   const [packetLossPercent, setPacketLossPercent] = useState(0);
   const [jitterMs, setJitterMs] = useState(0);
@@ -25,48 +24,63 @@ export function AppContent() {
   const [copyLinkButtonText, setCopyLinkButtonText] = useState('Copy link');
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setConnectionState(pc.connectionState);
-      pc.getStats(null).then((stats) => {
-        // inbound-rtp audio counts codec payload only and is supported in all
-        // browsers (unlike the transport stats type, missing in Firefox).
-        const inboundAudio = [...stats.values()].find(
-          (s) => s.type === 'inbound-rtp' && s.kind === 'audio'
-        );
-        if (!inboundAudio) return;
+    const interval = setInterval(async () => {
+      const peers = [...refs.peers.values()];
+      setConnectedCount(
+        peers.filter((peer) => peer.pc.connectionState === 'connected').length
+      );
 
-        const {
-          bytesReceived,
-          timestamp,
-          packetsLost = 0,
-          packetsReceived = 0,
-          jitter = 0,
-        } = inboundAudio;
-        // Compute over the report's own timestamps — setInterval drifts and
-        // background tabs are throttled, so an assumed 1s interval spikes.
-        const elapsedMs = timestamp - refs.lastStatsTimestamp;
-        if (refs.lastStatsTimestamp > 0 && elapsedMs > 0) {
-          setBitrateKbps(
-            Math.max(
+      // Aggregate stats: bitrate is summed across peers; loss and jitter
+      // report the worst pair. Deltas are computed per-pc from the report's
+      // own timestamps — setInterval drifts and background tabs are
+      // throttled, so an assumed 1s interval spikes.
+      let totalKbps = 0;
+      let worstLossPercent = 0;
+      let worstJitterMs = 0;
+      await Promise.all(
+        peers.map(async (peer) => {
+          // inbound-rtp audio counts codec payload only and is supported in
+          // all browsers (unlike the transport stats type, missing in
+          // Firefox).
+          const stats = await peer.pc.getStats(null);
+          const inboundAudio = [...stats.values()].find(
+            (s) => s.type === 'inbound-rtp' && s.kind === 'audio'
+          );
+          if (!inboundAudio) return;
+
+          const {
+            bytesReceived,
+            timestamp,
+            packetsLost = 0,
+            packetsReceived = 0,
+            jitter = 0,
+          } = inboundAudio;
+          const elapsedMs = timestamp - peer.stats.ts;
+          if (peer.stats.ts > 0 && elapsedMs > 0) {
+            totalKbps += Math.max(
               0,
-              Math.round(
-                ((bytesReceived - refs.totalBytesReceived) * 8) / elapsedMs
-              )
-            )
-          );
-          const newLost = Math.max(0, packetsLost - refs.lastPacketsLost);
-          const newReceived = packetsReceived - refs.lastPacketsReceived;
-          const newTotal = newLost + newReceived;
-          setPacketLossPercent(
-            newTotal > 0 ? Math.round((newLost / newTotal) * 100) : 0
-          );
-          setJitterMs(Math.round(jitter * 1000));
-        }
-        refs.totalBytesReceived = bytesReceived;
-        refs.lastStatsTimestamp = timestamp;
-        refs.lastPacketsLost = packetsLost;
-        refs.lastPacketsReceived = packetsReceived;
-      });
+              Math.round(((bytesReceived - peer.stats.bytes) * 8) / elapsedMs)
+            );
+            const newLost = Math.max(0, packetsLost - peer.stats.lost);
+            const newReceived = packetsReceived - peer.stats.received;
+            const newTotal = newLost + newReceived;
+            if (newTotal > 0) {
+              worstLossPercent = Math.max(
+                worstLossPercent,
+                Math.round((newLost / newTotal) * 100)
+              );
+            }
+            worstJitterMs = Math.max(worstJitterMs, Math.round(jitter * 1000));
+          }
+          peer.stats.bytes = bytesReceived;
+          peer.stats.ts = timestamp;
+          peer.stats.lost = packetsLost;
+          peer.stats.received = packetsReceived;
+        })
+      );
+      setBitrateKbps(totalKbps);
+      setPacketLossPercent(worstLossPercent);
+      setJitterMs(worstJitterMs);
     }, 1000);
 
     return () => clearInterval(interval);
@@ -75,7 +89,7 @@ export function AppContent() {
   useEffect(() => {
     (async () => {
       if (audioEnabled && paramId) {
-        const sessionError = await joinSession(paramId);
+        const sessionError = await joinRoom(paramId);
         setError(sessionError);
         setId(paramId);
       }
@@ -93,11 +107,6 @@ export function AppContent() {
   if (!id) {
     return <CreateSession setId={setId} />;
   }
-
-  const sessionState: Partial<Record<RTCPeerConnectionState, string>> = {
-    new: 'Waiting for connection...',
-    connected: 'You are connected.',
-  };
 
   const link = `${window.location.origin}/?id=${id}`;
 
@@ -123,20 +132,23 @@ export function AppContent() {
 
   return (
     <>
-      {connectionState === 'connected' && <PlayingIcon />}
-      <p>{sessionState[connectionState] ?? `Session ${connectionState}`}</p>
-      {!paramId && connectionState === 'new' && (
-        <>
-          <div>Invite someone to join the session:</div>
-          <Link>{link}</Link>
-          <p>
-            <Button onClick={handleCopyLink}>{copyLinkButtonText}</Button>
-          </p>
-        </>
-      )}
-      {connectionState === 'connected' && (
+      {connectedCount > 0 && <PlayingIcon />}
+      <p>
+        {connectedCount === 0
+          ? 'Waiting for others to join...'
+          : `Connected to ${connectedCount} peer${
+              connectedCount === 1 ? '' : 's'
+            }.`}
+      </p>
+      <div>Invite someone to join the session:</div>
+      <Link>{link}</Link>
+      <p>
+        <Button onClick={handleCopyLink}>{copyLinkButtonText}</Button>
+      </p>
+      {connectedCount > 0 && (
         <>
           <VolumeControls />
+          <ShareAudioControls />
           <p>
             Bitrate (incoming): {bitrateKbps} kb/s
             <br />
