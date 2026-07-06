@@ -118,16 +118,29 @@ export function AppContent() {
 
   useEffect(() => {
     (async () => {
-      if (audioEnabled && paramId) {
+      // The !id guard stops a second join: creating a session puts the new
+      // id into the URL (so the creator can rejoin after a reload), which
+      // makes paramId appear without a page load.
+      if (audioEnabled && paramId && !id) {
         const sessionError = await joinRoom(paramId);
         setError(sessionError);
         setId(paramId);
       }
     })();
-  }, [audioEnabled, paramId]);
+  }, [audioEnabled, paramId, id]);
 
   if (error) {
-    return <p>{error}</p>;
+    return (
+      <>
+        <p>{error}</p>
+        <CreateSession
+          setId={(newId) => {
+            setError('');
+            setId(newId);
+          }}
+        />
+      </>
+    );
   }
 
   if (!audioEnabled) {

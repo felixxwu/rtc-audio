@@ -15,6 +15,9 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
       setError(joinError);
       return;
     }
+    // Put the room in the URL so a reload (or crash) lands the creator back
+    // in their own room instead of losing the id.
+    history.replaceState(null, '', `/?id=${roomId}`);
     setId(roomId);
   };
 
