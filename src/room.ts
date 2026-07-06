@@ -14,8 +14,16 @@ type Timestamp = firebase.firestore.Timestamp;
 type DocRef = firebase.firestore.DocumentReference;
 type CollectionRef = firebase.firestore.CollectionReference;
 
-// Includes ourselves; used to pick the Opus bitrate tier at offer time.
-const roomSize = () => refs.peers.size + 1;
+// Room size for picking the Opus bitrate tier when negotiating with `peerId`:
+// us, them, and everyone else we have a LIVE connection to. Deliberately not
+// based on presence docs or the whole peer map — ungraceful exits leave
+// orphaned presence behind forever, and counting those would sink a 2-person
+// room to the 3-person tier after every phone drop.
+const roomSizeFor = (peerId: string) =>
+  2 +
+  [...refs.peers.entries()].filter(
+    ([id, peer]) => id !== peerId && peer.pc.connectionState === 'connected'
+  ).length;
 
 // Everything the old singleton pc got: mixed local track, DSCP priority,
 // RED > Opus codec preference, music content hint (set on the track itself
@@ -131,7 +139,10 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
   const publishOffer = async (initial: boolean) => {
     const offerDescription = await entry.pc.createOffer();
     if (offerDescription.sdp) {
-      offerDescription.sdp = enhanceAudioSdp(offerDescription.sdp, roomSize());
+      offerDescription.sdp = enhanceAudioSdp(
+        offerDescription.sdp,
+        roomSizeFor(peerId)
+      );
     }
     await entry.pc.setLocalDescription(offerDescription);
 
@@ -243,7 +254,10 @@ async function answerOffer(
   flushPendingCandidates(entry);
   const answerDescription = await entry.pc.createAnswer();
   if (answerDescription.sdp) {
-    answerDescription.sdp = enhanceAudioSdp(answerDescription.sdp, roomSize());
+    answerDescription.sdp = enhanceAudioSdp(
+      answerDescription.sdp,
+      roomSizeFor(offererId)
+    );
   }
   await entry.pc.setLocalDescription(answerDescription);
   await connDoc.update({
