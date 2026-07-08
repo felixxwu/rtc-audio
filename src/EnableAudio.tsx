@@ -3,6 +3,7 @@ import { colors } from './colors.ts';
 import { useState } from 'react';
 import { refs } from './refs.ts';
 import { Button } from './Button.tsx';
+import { micConstraints } from './audioInput.ts';
 
 export function EnableAudio({
   setAudioEnabled,
@@ -14,24 +15,21 @@ export function EnableAudio({
 
   const handleEnableAudio = async () => {
     try {
-      const localStream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: {
-          autoGainControl: false,
-          channelCount: {
-            ideal: 2,
-          },
-          echoCancellation: false,
-          noiseSuppression: false,
-          // Not in TS lib types yet; where supported, stops the browser
-          // applying voice-focused processing that hurts music.
-          ...{ voiceIsolation: false },
-          // Match Opus's native 48kHz so nothing gets resampled on the way
-          // to the encoder.
-          sampleRate: 48000,
-          sampleSize: 16,
-        },
-      });
+      // Use the remembered input device (e.g. an interface loopback) if one
+      // was chosen; otherwise the system default. Falls back to default if
+      // the remembered device is no longer available.
+      let localStream: MediaStream;
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia(
+          micConstraints(refs.inputDeviceId)
+        );
+      } catch (deviceError) {
+        if (!refs.inputDeviceId) throw deviceError;
+        refs.inputDeviceId = '';
+        localStream = await navigator.mediaDevices.getUserMedia(
+          micConstraints('')
+        );
+      }
 
       refs.audioContext = new AudioContext({
         latencyHint: 'playback',
@@ -49,6 +47,9 @@ export function EnableAudio({
       const source = refs.audioContext.createMediaStreamSource(localStream);
       source.connect(refs.micGainNode);
       refs.micGainNode.connect(micDestination);
+      // Kept so the input device can be swapped later without renegotiation.
+      refs.micStream = localStream;
+      refs.micSource = source;
 
       // Local monitor path, muted by default.
       refs.micGainNode.connect(refs.gainNode);

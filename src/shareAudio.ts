@@ -88,6 +88,10 @@ export async function startShareAudio(onEnded: () => void) {
   setSharingPresence(!!videoTrack);
   updateTransmission();
   updateVideoTransmission();
+
+  // Let the UI warn if the user shared a screen but forgot the "Also share
+  // audio" toggle (video present, no audio track).
+  return { hasAudio: !!audioTrack, hasVideo: !!videoTrack };
 }
 
 // Stop our share because another peer's took over, resetting the UI as if

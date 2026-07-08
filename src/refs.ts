@@ -1,5 +1,6 @@
 import type firebase from 'firebase/app';
 import { loadVolume } from './volumeStorage.ts';
+import { loadInputDeviceId } from './audioInput.ts';
 
 export type Peer = {
   pc: RTCPeerConnection;
@@ -92,6 +93,12 @@ export const refs = {
   micGainNode: <GainNode | null>null,
   micDestination: <MediaStreamAudioDestinationNode | null>null,
   micTrack: <MediaStreamTrack | null>null,
+  // Raw input stream/source feeding the graph; swapped when the input device
+  // changes (the outgoing micDestination track stays the same).
+  micStream: <MediaStream | null>null,
+  micSource: <MediaStreamAudioSourceNode | null>null,
+  // Chosen input device (empty = system default), remembered across sessions.
+  inputDeviceId: loadInputDeviceId(),
   // Tab/window audio shared via getDisplayMedia, mixed into the same
   // outgoing track as the mic.
   shareStream: <MediaStream | null>null,

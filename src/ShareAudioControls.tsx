@@ -32,8 +32,16 @@ export function ShareAudioControls() {
   const handleShare = async () => {
     setHint('');
     try {
-      await startShareAudio(() => setSharing(false));
+      const { hasAudio, hasVideo } = await startShareAudio(() =>
+        setSharing(false)
+      );
       setSharing(true);
+      if (hasVideo && !hasAudio) {
+        setHint(
+          'Sharing screen only — no audio was captured. If you meant to ' +
+            'share sound, stop and re-share with "Also share audio" enabled.'
+        );
+      }
     } catch (e) {
       if (e instanceof NoAudioTrackError) {
         setHint(
@@ -51,20 +59,14 @@ export function ShareAudioControls() {
   const handleStop = () => {
     stopShareAudio();
     setSharing(false);
+    setHint('');
   };
 
-  if (!sharing) {
-    return (
-      <>
-        <p>
-          <Button onClick={handleShare}>Share tab/window</Button>
-        </p>
-        {hint && <Hint>{hint}</Hint>}
-      </>
-    );
-  }
-
-  return (
+  const content = !sharing ? (
+    <p>
+      <Button onClick={handleShare}>Share tab/window</Button>
+    </p>
+  ) : (
     <>
       {refs.shareStream !== null && (
         <Row>
@@ -77,11 +79,27 @@ export function ShareAudioControls() {
             step={STEP}
             onChange={(e) => setShareVolume(Number(e.target.value))}
           />
+          {/* Match the mic row's gear width so this slider aligns too. */}
+          <Spacer />
         </Row>
       )}
       <p>
         <Button onClick={handleStop}>Stop sharing</Button>
       </p>
+    </>
+  );
+
+  return (
+    <>
+      {content}
+      {hint && (
+        <Backdrop onClick={() => setHint('')}>
+          <Dialog onClick={(e) => e.stopPropagation()}>
+            <p>{hint}</p>
+            <Button onClick={() => setHint('')}>Got it</Button>
+          </Dialog>
+        </Backdrop>
+      )}
     </>
   );
 }
@@ -97,7 +115,29 @@ const RangeInput = styled('input')`
   accent-color: ${colors.accent2};
 `;
 
-const Hint = styled('p')`
+const Spacer = styled('div')`
+  width: 24px;
+`;
+
+const Backdrop = styled('div')`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+`;
+
+const Dialog = styled('div')`
+  background: ${colors.bg};
+  border: 1px solid ${colors.accent};
+  border-radius: 12px;
+  padding: 20px 24px;
+  width: min(90vw, 400px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  line-height: 1.5;
   color: ${colors.accent2};
-  max-width: 400px;
 `;

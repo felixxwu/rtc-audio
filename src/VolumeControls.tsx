@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { refs } from './refs.ts';
 import { updateTransmission } from './transmission.ts';
 import { saveVolume } from './volumeStorage.ts';
+import { InputDevicePicker } from './InputDevicePicker.tsx';
 
 export const ICON_SIZE = 24;
 export const STEP = 0.05;
@@ -65,6 +66,7 @@ export function VolumeControls() {
           step={STEP}
           onChange={(e) => setMicVolume(Number(e.target.value))}
         />
+        <InputDevicePicker />
       </Row>
       <Row>
         <IconWrapper onClick={handleSpeakerIconClick}>
@@ -78,6 +80,8 @@ export function VolumeControls() {
           step={STEP}
           onChange={(e) => setSpeakerVolume(Number(e.target.value))}
         />
+        {/* Match the mic row's gear width so the two sliders stay aligned. */}
+        <Spacer />
       </Row>
     </>
   );
@@ -92,6 +96,10 @@ const Row = styled('div')`
 const RangeInput = styled('input')`
   width: 200px;
   accent-color: ${colors.accent2};
+`;
+
+const Spacer = styled('div')`
+  width: 24px;
 `;
 
 const IconWrapper = styled('div')`

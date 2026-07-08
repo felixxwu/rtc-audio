@@ -110,18 +110,6 @@ export function FileControls() {
               </IconButton>
             </Header>
 
-            <Button onClick={() => inputRef.current?.click()}>
-              Send files…
-            </Button>
-            <DropHint>or drop files here</DropHint>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={handlePick}
-            />
-
             <List>
               {items.length === 0 && <Empty>No files yet.</Empty>}
 
@@ -158,6 +146,18 @@ export function FileControls() {
                 )
               )}
             </List>
+
+            <Button onClick={() => inputRef.current?.click()}>
+              Choose files…
+            </Button>
+            <DropHint>or drop files here</DropHint>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={handlePick}
+            />
           </Dialog>
         </Backdrop>
       )}
@@ -176,7 +176,7 @@ const Backdrop = styled('div')`
 `;
 
 const Dialog = styled('div')<{ $dragging?: boolean }>`
-  background: ${(p) => (p.$dragging ? 'rgba(170, 170, 255, 0.1)' : colors.bg)};
+  background: ${colors.bg};
   border: 2px dashed
     ${(p) => (p.$dragging ? colors.accent2 : 'transparent')};
   outline: 1px solid ${colors.accent};
