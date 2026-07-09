@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { refs } from './refs.ts';
 import { Button } from './Button.tsx';
 import { micConstraints } from './audioInput.ts';
+import { saveAudioCodec } from './audioCodec.ts';
+import { startLossless } from './losslessSender.ts';
 
 export function EnableAudio({
   setAudioEnabled,
@@ -62,6 +64,23 @@ export function EnableAudio({
       const track = micDestination.stream.getAudioTracks()[0];
       track.contentHint = 'music';
       refs.micTrack = track;
+
+      // If lossless was the saved codec, bring up the FLAC encode pipeline now
+      // that the audio graph exists — otherwise a reload into FLAC would have
+      // Opus detached but nothing encoding (silent). Fall back to Opus if the
+      // pipeline can't start (e.g. worklet load failure) so audio still works.
+      if (refs.audioCodec === 'flac') {
+        try {
+          await startLossless();
+        } catch (losslessError) {
+          console.error(
+            'Lossless init failed, falling back to Opus',
+            losslessError
+          );
+          refs.audioCodec = 'opus';
+          saveAudioCodec('opus');
+        }
+      }
 
       setAudioEnabled(true);
     } catch (e) {
