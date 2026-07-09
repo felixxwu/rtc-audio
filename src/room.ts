@@ -380,8 +380,15 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
       const data = snapshot.data();
       if (!data) return;
       applyRemoteWatching(entry, data, peerId);
+      // Only apply an answer when we're actually waiting for one. The doc
+      // snapshot re-fires on any field change (watching, expireAt, re-answers
+      // after an ICE restart), and currentRemoteDescription only updates once
+      // the async setRemoteDescription resolves — so without the signaling-
+      // state guard a re-fire or race would re-apply an answer while already
+      // 'stable', which throws "Called in wrong state: stable".
       if (
         data.answer &&
+        entry.pc.signalingState === 'have-local-offer' &&
         data.answer.sdp !== entry.pc.currentRemoteDescription?.sdp
       ) {
         entry.pc
