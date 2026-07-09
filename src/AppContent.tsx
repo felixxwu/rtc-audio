@@ -62,19 +62,32 @@ export function AppContent() {
           const outboundVideo = values.find(
             (s) => s.type === 'outbound-rtp' && s.kind === 'video'
           );
-          // Both data channels (cursors + files) summed; cursor traffic is
-          // negligible next to a transfer.
+          // Data channels summed by purpose. The 'audio' channel carries the
+          // lossless FLAC stream, so its bytes are attributed to audio (below)
+          // rather than to data; cursors + files stay in the data bucket.
           let dataBytesReceived = 0;
           let dataBytesSent = 0;
+          let audioDataReceived = 0;
+          let audioDataSent = 0;
           for (const s of values) {
             if (s.type === 'data-channel') {
-              dataBytesReceived += s.bytesReceived ?? 0;
-              dataBytesSent += s.bytesSent ?? 0;
+              if (s.label === 'audio') {
+                audioDataReceived += s.bytesReceived ?? 0;
+                audioDataSent += s.bytesSent ?? 0;
+              } else {
+                dataBytesReceived += s.bytesReceived ?? 0;
+                dataBytesSent += s.bytesSent ?? 0;
+              }
             }
           }
-          if (!inboundAudio && !outboundAudio) return;
+          // Skip only if there's no audio at all on any transport (RTP or the
+          // FLAC data channel). On FLAC the RTP audio stats may be absent.
+          const hasAudioChannel = audioDataReceived > 0 || audioDataSent > 0;
+          if (!inboundAudio && !outboundAudio && !hasAudioChannel) return;
 
-          const timestamp = (inboundAudio ?? outboundAudio).timestamp;
+          const timestamp = (inboundAudio ?? outboundAudio ?? values[0])
+            ?.timestamp;
+          if (timestamp === undefined) return;
           const elapsedMs = timestamp - peer.stats.ts;
           if (peer.stats.ts > 0 && elapsedMs > 0) {
             if (inboundAudio) {
@@ -104,17 +117,34 @@ export function AppContent() {
                 Math.round(jitter * 1000)
               );
             }
-            if (outboundAudio) {
-              outgoing.push(
-                Math.max(
+            // FLAC audio arrives on the 'audio' data channel — count it as
+            // audio-in alongside any Opus RTP audio.
+            totalKbps += Math.max(
+              0,
+              Math.round(
+                ((audioDataReceived - peer.stats.audioDataBytes) * 8) /
+                  elapsedMs
+              )
+            );
+            // Per-peer audio uplink = Opus RTP out + FLAC data-channel out
+            // (only one is non-zero, depending on the active codec).
+            const rtpOutKbps = outboundAudio
+              ? Math.max(
                   0,
                   Math.round(
                     ((outboundAudio.bytesSent - peer.stats.bytesSent) * 8) /
                       elapsedMs
                   )
                 )
-              );
-            }
+              : 0;
+            const flacOutKbps = Math.max(
+              0,
+              Math.round(
+                ((audioDataSent - peer.stats.audioDataBytesSent) * 8) /
+                  elapsedMs
+              )
+            );
+            outgoing.push(rtpOutKbps + flacOutKbps);
             if (inboundVideo) {
               videoInKbps += Math.max(
                 0,
@@ -161,6 +191,8 @@ export function AppContent() {
           }
           peer.stats.dataBytes = dataBytesReceived;
           peer.stats.dataBytesSent = dataBytesSent;
+          peer.stats.audioDataBytes = audioDataReceived;
+          peer.stats.audioDataBytesSent = audioDataSent;
         })
       );
       setBitrateKbps(totalKbps);

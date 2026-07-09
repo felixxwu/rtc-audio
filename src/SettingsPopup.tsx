@@ -6,6 +6,9 @@ import { Button } from './Button.tsx';
 import { refs } from './refs.ts';
 import { switchInputDevice } from './audioInput.ts';
 import { leaveRoom } from './room.ts';
+import { saveAudioCodec, type AudioCodec } from './audioCodec.ts';
+import { startLossless, stopLossless } from './losslessSender.ts';
+import { flacReady } from './flacLoader.ts';
 
 export type Stats = {
   bitrateKbps: number;
@@ -62,6 +65,48 @@ function InputSelect() {
   );
 }
 
+// Outbound audio codec. 'opus' = unchanged RTP path; 'flac' = lossless over a
+// data channel (higher bandwidth). FLAC is disabled if its module can't load.
+function CodecSelect() {
+  const [codec, setCodec] = useState<AudioCodec>(refs.audioCodec);
+  const [flacAvailable, setFlacAvailable] = useState(true);
+
+  useEffect(() => {
+    flacReady()
+      .then(() => setFlacAvailable(true))
+      .catch(() => setFlacAvailable(false));
+  }, []);
+
+  const pick = async (next: AudioCodec) => {
+    const previous = codec;
+    setCodec(next);
+    saveAudioCodec(next);
+    try {
+      if (next === 'flac') await startLossless();
+      else stopLossless();
+    } catch (err) {
+      console.error(err);
+      setCodec(previous);
+      saveAudioCodec(previous);
+    }
+  };
+
+  return (
+    <Field>
+      <Label>Audio codec</Label>
+      <Select
+        value={codec}
+        onChange={(e) => pick(e.target.value as AudioCodec)}
+      >
+        <option value="opus">Opus (near lossless - variable bitrate)</option>
+        <option value="flac" disabled={!flacAvailable}>
+          FLAC (lossless - may stutter on low bandwidth){flacAvailable ? '' : ' — unavailable'}
+        </option>
+      </Select>
+    </Field>
+  );
+}
+
 export function SettingsPopup({
   onClose,
   stats,
@@ -80,6 +125,7 @@ export function SettingsPopup({
   return (
     <Modal onClose={onClose} title="Settings">
       <InputSelect />
+      <CodecSelect />
       <Field>
         <Label>Connection</Label>
         <Stat>

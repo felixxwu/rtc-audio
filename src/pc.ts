@@ -29,9 +29,11 @@ export function enhanceAudioSdp(sdp: string, roomSize = 2): string {
     maxaveragebitrate: String(bitrateForRoomSize(roomSize)),
     maxplaybackrate: '48000',
     useinbandfec: '1',
-    // Constant bitrate: hold max quality through quiet passages instead of
-    // letting VBR dip. Costs bandwidth during silence.
-    cbr: '1',
+    // VBR (cbr=0): more efficient quality-per-bit than CBR and it drops the
+    // uplink during quiet/silent passages instead of padding to the cap. At
+    // the 510 kbps ceiling Opus is already transparent, so this costs no
+    // audible quality; the truly-lossless option is the FLAC codec.
+    cbr: '0',
     // 20ms frames: better coding efficiency and half the packet overhead of
     // the 10ms default, for ~10ms extra latency.
     minptime: '20',

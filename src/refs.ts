@@ -1,6 +1,7 @@
 import type firebase from 'firebase/app';
 import { loadVolume } from './volumeStorage.ts';
 import { loadInputDeviceId } from './audioInput.ts';
+import { loadAudioCodec } from './audioCodec.ts';
 
 export type Peer = {
   pc: RTCPeerConnection;
@@ -12,6 +13,10 @@ export type Peer = {
   cursorChannel: RTCDataChannel;
   // Per-pair reliable, ordered channel for file transfers.
   fileChannel: RTCDataChannel;
+  // Per-pair reliable, ordered channel carrying our lossless FLAC stream
+  // (control JSON + binary frames). Pre-negotiated so any peer may start
+  // sending FLAC without renegotiation.
+  audioChannel: RTCDataChannel;
   videoStream: MediaStream | null;
   // Whether the remote peer asked to watch our shared screen.
   remoteWatching: boolean;
@@ -20,6 +25,9 @@ export type Peer = {
   remoteFullQuality: boolean;
   connDoc: firebase.firestore.DocumentReference | null;
   audio: HTMLAudioElement;
+  // The remote peer's inbound RTP MediaStream, retained so the lossless
+  // receiver can restore it on the <audio> element when lossless stops.
+  rtpStream: MediaStream | null;
   // Per-connection stats deltas (bitrate/loss/jitter are computed from the
   // previous report, per pc).
   stats: {
@@ -29,6 +37,10 @@ export type Peer = {
     videoBytesSent: number;
     dataBytes: number;
     dataBytesSent: number;
+    // FLAC audio-channel baselines, tracked separately from cursor/file data
+    // so lossless audio is reported as audio, not lumped into data/total only.
+    audioDataBytes: number;
+    audioDataBytesSent: number;
     ts: number;
     lost: number;
     received: number;
@@ -122,6 +134,9 @@ export const refs = {
   micVolume: loadVolume('mic'),
   shareVolume: loadVolume('share'),
   speakerVolume: loadVolume('speaker'),
+  // Outbound audio codec: 'opus' (RTP, default) or 'flac' (lossless over a
+  // data channel). Transmit-only and unilateral; seeded from localStorage.
+  audioCodec: loadAudioCodec(),
 };
 
 // Debug handle for poking at connections from the console in dev.

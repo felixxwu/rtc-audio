@@ -12,6 +12,8 @@ import {
   peerDisconnected,
   reofferTo,
 } from './fileTransfer.ts';
+import { onAudioChannelOpen } from './losslessSender.ts';
+import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
 
 // Lives for the lifetime of the tab; a rejoin after reload is a new peer.
 export const myPeerId = crypto.randomUUID();
@@ -113,6 +115,18 @@ function createPeer(peerId: string) {
   // offers once its channel opens.
   fileChannel.onopen = () => reofferTo(peerId);
 
+  // Lossless FLAC audio channel (id 2). Reliable + ordered so the stream is
+  // truly lossless; retransmit latency is absorbed by the receiver's buffer.
+  const audioChannel = pc.createDataChannel('audio', {
+    negotiated: true,
+    id: 2,
+    ordered: true,
+  });
+  audioChannel.binaryType = 'arraybuffer';
+  audioChannel.onmessage = (event) => handleAudioMessage(peerId, event.data);
+  // If we're already streaming lossless when this peer connects, start sending.
+  audioChannel.onopen = () => onAudioChannelOpen(peerId);
+
   const audio = new Audio();
   audio.autoplay = true;
   // Inherit the current slider value — a peer joining after the speaker was
@@ -132,7 +146,12 @@ function createPeer(peerId: string) {
       // legacy equivalent, in seconds
       (event.receiver as { playoutDelayHint?: number }).playoutDelayHint = 0.5;
     }
-    audio.srcObject = event.streams[0];
+    entry.rtpStream = event.streams[0];
+    // Don't override lossless playback if this peer is streaming FLAC (the
+    // receiver has swapped its own MediaStream onto the element).
+    if (audio.srcObject === null || audio.srcObject === entry.rtpStream) {
+      audio.srcObject = event.streams[0];
+    }
   };
 
   const entry = {
@@ -141,11 +160,13 @@ function createPeer(peerId: string) {
     videoSender,
     cursorChannel,
     fileChannel,
+    audioChannel,
     videoStream: <MediaStream | null>null,
     remoteWatching: false,
     remoteFullQuality: false,
     connDoc: <firebase.firestore.DocumentReference | null>null,
     audio,
+    rtpStream: <MediaStream | null>null,
     stats: {
       bytes: 0,
       bytesSent: 0,
@@ -153,6 +174,8 @@ function createPeer(peerId: string) {
       videoBytesSent: 0,
       dataBytes: 0,
       dataBytesSent: 0,
+      audioDataBytes: 0,
+      audioDataBytesSent: 0,
       ts: 0,
       lost: 0,
       received: 0,
@@ -256,6 +279,7 @@ export function closePeer(peerId: string) {
   if (!entry) return;
   entry.unsubscribes.forEach((unsubscribe) => unsubscribe());
   entry.pc.oniceconnectionstatechange = null;
+  teardownReceiver(peerId);
   entry.pc.close();
   entry.audio.srcObject = null;
   refs.peers.delete(peerId);
