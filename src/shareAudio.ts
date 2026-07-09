@@ -1,5 +1,5 @@
 import { refs } from './refs.ts';
-import { updateTransmission } from './transmission.ts';
+import { reconcileTransmission } from './losslessSender.ts';
 import { setSharingPresence, updateVideoTransmission } from './room.ts';
 
 // Callback to reset the share UI, so a forced stop (someone else took over
@@ -86,7 +86,7 @@ export async function startShareAudio(onEnded: () => void) {
   }
 
   setSharingPresence(!!videoTrack);
-  updateTransmission();
+  reconcileTransmission();
   updateVideoTransmission();
 
   // Let the UI warn if the user shared a screen but forgot the "Also share
@@ -113,6 +113,6 @@ export function stopShareAudio() {
   refs.shareVideoTrack?.stop();
   refs.shareVideoTrack = null;
   setSharingPresence(false);
-  updateTransmission();
+  reconcileTransmission();
   updateVideoTransmission();
 }

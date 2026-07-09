@@ -3,7 +3,6 @@ import { firestore } from './firebase.ts';
 import { enhanceAudioSdp, servers } from './pc.ts';
 import { refs, type Peer } from './refs.ts';
 import { releaseMeter } from './audioLevels.ts';
-import { updateTransmission } from './transmission.ts';
 import { keepAwake } from './wakeLock.ts';
 import { cursors, handleCursorMessage } from './cursors.ts';
 import { forceStopShare } from './shareAudio.ts';
@@ -12,7 +11,10 @@ import {
   peerDisconnected,
   reofferTo,
 } from './fileTransfer.ts';
-import { onAudioChannelOpen } from './losslessSender.ts';
+import {
+  reconcileTransmission,
+  releaseTransmission,
+} from './losslessSender.ts';
 import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
 
 // Lives for the lifetime of the tab; a rejoin after reload is a new peer.
@@ -124,14 +126,15 @@ function createPeer(peerId: string) {
   });
   audioChannel.binaryType = 'arraybuffer';
   audioChannel.onmessage = (event) => handleAudioMessage(peerId, event.data);
-  // If we're already streaming lossless when this peer connects, start sending.
-  audioChannel.onopen = () => onAudioChannelOpen(peerId);
+  // Reconcile once the channel can carry control/frames — sends the FLAC
+  // 'start' (+ header) to this peer if we're currently on lossless.
+  audioChannel.onopen = () => reconcileTransmission();
 
   const audio = new Audio();
   audio.autoplay = true;
-  // Inherit the current slider value — a peer joining after the speaker was
-  // lowered must not play at full volume.
-  audio.volume = refs.speakerVolume;
+  // Restore this peer's dialled-in volume across reconnects (the element is
+  // recreated each time); fall back to the global default for a new peer.
+  audio.volume = refs.peerVolumes.get(peerId) ?? refs.speakerVolume;
 
   pc.ontrack = (event) => {
     if (event.track.kind === 'video') {
@@ -187,9 +190,9 @@ function createPeer(peerId: string) {
     pendingCandidates: <RTCIceCandidateInit[]>[],
   };
   refs.peers.set(peerId, entry);
-  // A muted mic (or no active share) means the new sender should start
-  // detached, like everyone else's.
-  updateTransmission();
+  // Bring the new peer's sender into line with the current codec/mute state
+  // (starts detached when muted, or when we're on FLAC).
+  reconcileTransmission();
   return entry;
 }
 
@@ -280,6 +283,7 @@ export function closePeer(peerId: string) {
   entry.unsubscribes.forEach((unsubscribe) => unsubscribe());
   entry.pc.oniceconnectionstatechange = null;
   teardownReceiver(peerId);
+  releaseTransmission(peerId);
   entry.pc.close();
   entry.audio.srcObject = null;
   refs.peers.delete(peerId);

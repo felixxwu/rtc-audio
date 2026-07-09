@@ -3,9 +3,8 @@ import { colors } from './colors.ts';
 import { useState } from 'react';
 import { refs } from './refs.ts';
 import { Button } from './Button.tsx';
-import { micConstraints } from './audioInput.ts';
-import { saveAudioCodec } from './audioCodec.ts';
-import { startLossless } from './losslessSender.ts';
+import { micConstraints, saveInputDeviceId } from './audioInput.ts';
+import { reconcileTransmission } from './losslessSender.ts';
 
 export function EnableAudio({
   setAudioEnabled,
@@ -27,7 +26,10 @@ export function EnableAudio({
         );
       } catch (deviceError) {
         if (!refs.inputDeviceId) throw deviceError;
+        // The remembered device is gone — clear it (and its persisted copy)
+        // so we don't retry the dead device on every future reload.
         refs.inputDeviceId = '';
+        saveInputDeviceId('');
         localStream = await navigator.mediaDevices.getUserMedia(
           micConstraints('')
         );
@@ -65,22 +67,12 @@ export function EnableAudio({
       track.contentHint = 'music';
       refs.micTrack = track;
 
-      // If lossless was the saved codec, bring up the FLAC encode pipeline now
-      // that the audio graph exists — otherwise a reload into FLAC would have
-      // Opus detached but nothing encoding (silent). Fall back to Opus if the
-      // pipeline can't start (e.g. worklet load failure) so audio still works.
-      if (refs.audioCodec === 'flac') {
-        try {
-          await startLossless();
-        } catch (losslessError) {
-          console.error(
-            'Lossless init failed, falling back to Opus',
-            losslessError
-          );
-          refs.audioCodec = 'opus';
-          saveAudioCodec('opus');
-        }
-      }
+      // Bring the transmit path in line with the saved codec now that the
+      // audio graph exists. If FLAC was saved this starts its pipeline (with an
+      // internal Opus fallback if it can't); otherwise it's a no-op until peers
+      // connect. Reload-into-FLAC would otherwise leave Opus detached with
+      // nothing encoding (silent).
+      reconcileTransmission();
 
       setAudioEnabled(true);
     } catch (e) {

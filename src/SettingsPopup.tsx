@@ -7,7 +7,10 @@ import { refs } from './refs.ts';
 import { switchInputDevice } from './audioInput.ts';
 import { leaveRoom } from './room.ts';
 import { saveAudioCodec, type AudioCodec } from './audioCodec.ts';
-import { startLossless, stopLossless } from './losslessSender.ts';
+import {
+  reconcileTransmission,
+  whenTransmissionSettled,
+} from './losslessSender.ts';
 import { flacReady } from './flacLoader.ts';
 
 export type Stats = {
@@ -78,17 +81,15 @@ function CodecSelect() {
   }, []);
 
   const pick = async (next: AudioCodec) => {
-    const previous = codec;
-    setCodec(next);
+    setCodec(next); // optimistic
+    refs.audioCodec = next;
     saveAudioCodec(next);
-    try {
-      if (next === 'flac') await startLossless();
-      else stopLossless();
-    } catch (err) {
-      console.error(err);
-      setCodec(previous);
-      saveAudioCodec(previous);
-    }
+    reconcileTransmission();
+    // Wait for the pipeline to settle, then reflect the codec actually in
+    // effect — FLAC may have fallen back to Opus if it couldn't start.
+    await whenTransmissionSettled();
+    setCodec(refs.audioCodec);
+    saveAudioCodec(refs.audioCodec);
   };
 
   return (

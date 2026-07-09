@@ -1,25 +1,21 @@
-import { refs } from './refs.ts';
+// Pure decision for whether the Opus/RTP sender should be transmitting. The
+// Opus track carries audio only while we're actually on Opus — i.e. NOT once
+// the FLAC pipeline is live (that would double-send). While FLAC is selected
+// but its pipeline hasn't come up yet, Opus keeps sending so there's no audio
+// gap during the handover. Otherwise Opus sends whenever something audible
+// exists (mic unmuted, or a share with volume).
+//
+// Kept side-effect-free so the reconciler (losslessSender) applies it and it
+// stays unit-testable.
+export type TransmissionInputs = {
+  codec: 'opus' | 'flac';
+  flacPipelineUp: boolean;
+  micVolume: number;
+  hasShare: boolean;
+  shareVolume: number;
+};
 
-// When nothing audible is being sent, stop transmitting entirely instead of
-// sending encoded silence — frees the full upstream (CBR + RED never dips on
-// quiet audio), which helps the incoming stream on weak connections. Applies
-// to every peer's sender; also called when a new peer joins so it inherits
-// the current mute state.
-export function updateTransmission() {
-  // Only the Opus/RTP path uses this sender. While the codec is 'flac', audio
-  // travels over the data channel instead, so the Opus track must stay
-  // detached regardless of mute/volume — otherwise share/volume/mute events
-  // (which call this) would re-enable Opus underneath the FLAC stream and
-  // double-send.
-  const shouldSend =
-    refs.audioCodec === 'opus' &&
-    (refs.micVolume > 0 || (refs.shareStream !== null && refs.shareVolume > 0));
-  for (const peer of refs.peers.values()) {
-    const isSending = peer.sender.track !== null;
-    if (shouldSend !== isSending) {
-      peer.sender
-        .replaceTrack(shouldSend ? refs.micTrack : null)
-        .catch(console.error);
-    }
-  }
+export function shouldSendOpus(s: TransmissionInputs): boolean {
+  if (s.codec === 'flac' && s.flacPipelineUp) return false;
+  return s.micVolume > 0 || (s.hasShare && s.shareVolume > 0);
 }

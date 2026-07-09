@@ -15,7 +15,7 @@ import {
 } from './shareAudio.ts';
 import { Modal } from './Popup.tsx';
 import { Button } from './Button.tsx';
-import { updateTransmission } from './transmission.ts';
+import { reconcileTransmission } from './losslessSender.ts';
 import { saveVolume } from './volumeStorage.ts';
 import { circleColor } from './participantColor.ts';
 import { colors } from './colors.ts';
@@ -130,14 +130,14 @@ export function SelfBox({ stats }: { stats: Stats }) {
     refs.micVolume = micVolume;
     if (refs.micGainNode) refs.micGainNode.gain.value = micVolume;
     saveVolume('mic', micVolume);
-    updateTransmission();
+    reconcileTransmission();
   }, [micVolume]);
 
   useEffect(() => {
     refs.shareVolume = shareVolume;
     if (refs.shareGainNode) refs.shareGainNode.gain.value = shareVolume;
     saveVolume('share', shareVolume);
-    updateTransmission();
+    reconcileTransmission();
   }, [shareVolume]);
 
   const micIcon =

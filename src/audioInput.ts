@@ -31,7 +31,7 @@ export function loadInputDeviceId(): string {
   }
 }
 
-function saveInputDeviceId(deviceId: string) {
+export function saveInputDeviceId(deviceId: string) {
   try {
     if (deviceId) localStorage.setItem(INPUT_DEVICE_KEY, deviceId);
     else localStorage.removeItem(INPUT_DEVICE_KEY);

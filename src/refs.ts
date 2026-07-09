@@ -128,12 +128,17 @@ export const refs = {
   // When our own screen share started (client ms), 0 if not sharing. Used to
   // resolve exclusive sharing: the most recent share wins.
   mySharingSince: 0,
-  // Volume slider values live here so they survive VolumeControls
-  // unmounting when the connection drops and reconnects. Seeded from
-  // localStorage so they also survive across sessions.
+  // Volume slider values live here so they survive the controls unmounting
+  // when the connection drops and reconnects. Seeded from localStorage so they
+  // also survive across sessions.
   micVolume: loadVolume('mic'),
   shareVolume: loadVolume('share'),
   speakerVolume: loadVolume('speaker'),
+  // Per-participant playback volume, keyed by peerId. Canonical source of
+  // truth: the peer's <audio> element is recreated on every reconnect, so the
+  // dialled-in level must live here to survive. Not persisted across sessions
+  // (peer ids are per-session), but stable across a peer's reconnects.
+  peerVolumes: new Map<string, number>(),
   // Outbound audio codec: 'opus' (RTP, default) or 'flac' (lossless over a
   // data channel). Transmit-only and unilateral; seeded from localStorage.
   audioCodec: loadAudioCodec(),

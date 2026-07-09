@@ -23,11 +23,11 @@ export function ParticipantBox({ id }: { id: string }) {
   const borderRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Per-participant playback volume, seeded from this peer's audio element
-  // (which starts at the remembered default) so each stream is dialled in
-  // individually.
+  // Per-participant playback volume. Canonical value is refs.peerVolumes so it
+  // survives the peer's <audio> element being recreated on reconnect; fall
+  // back to the global default for a peer dialled in for the first time.
   const [volume, setVolume] = useState(
-    refs.peers.get(id)?.audio.volume ?? refs.speakerVolume
+    refs.peerVolumes.get(id) ?? refs.speakerVolume
   );
 
   // Register the border with the colour loop (only the border reacts).
@@ -37,8 +37,10 @@ export function ParticipantBox({ id }: { id: string }) {
     return () => unregisterBox(id);
   }, [id]);
 
-  // Apply this peer's volume to only their audio element.
+  // Apply this peer's volume to their audio element and persist it as the
+  // canonical value so a reconnect (new element) restores it.
   useEffect(() => {
+    refs.peerVolumes.set(id, volume);
     const peer = refs.peers.get(id);
     if (peer) peer.audio.volume = volume;
   }, [id, volume]);
