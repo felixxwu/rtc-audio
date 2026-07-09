@@ -25,8 +25,9 @@ let moduleAdded = false;
 
 async function ensureCaptureModule(ctx: AudioContext) {
   if (moduleAdded) return;
+  // Served from public/ as plain JS (see the worklet file for why).
   await ctx.audioWorklet.addModule(
-    new URL('./pcm-capture.worklet.ts', import.meta.url)
+    `${import.meta.env.BASE_URL}pcm-capture.worklet.js`
   );
   moduleAdded = true;
 }
@@ -46,44 +47,67 @@ function sendStart(channel: RTCDataChannel | undefined) {
 }
 
 export async function startLossless(): Promise<void> {
-  refs.audioCodec = 'flac';
   const ctx = refs.audioContext;
-  if (!ctx || !refs.micDestination || captureNode) return;
+  // No audio graph yet (not in a session): just record the preference so the
+  // stream starts once peers connect (onAudioChannelOpen). Nothing to roll
+  // back, so it's safe to commit the codec here.
+  if (!ctx || !refs.micDestination || captureNode) {
+    refs.audioCodec = 'flac';
+    return;
+  }
   header = null;
 
-  await ensureCaptureModule(ctx);
-  blocker = new PcmBlocker(STREAM_PARAMS.channels, STREAM_PARAMS.blockSize);
+  // Everything below can throw (worklet load, worker spawn, node creation).
+  // Don't commit refs.audioCodec or detach Opus until it all succeeds, so a
+  // failure leaves us cleanly on Opus rather than in a half-switched state.
+  try {
+    await ensureCaptureModule(ctx);
+    blocker = new PcmBlocker(STREAM_PARAMS.channels, STREAM_PARAMS.blockSize);
 
-  encoderWorker = new Worker(
-    new URL('./flacEncoder.worker.ts', import.meta.url),
-    { type: 'module' }
-  );
-  encoderWorker.onmessage = (
-    e: MessageEvent<{ type: 'frames'; bytes: ArrayBuffer }>
-  ) => {
-    if (e.data.type !== 'frames') return;
-    if (!header) header = e.data.bytes.slice(0); // first output carries STREAMINFO
-    broadcastFrame(e.data.bytes);
-  };
-  encoderWorker.postMessage({ type: 'init', params: STREAM_PARAMS });
+    encoderWorker = new Worker(
+      new URL('./flacEncoder.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    encoderWorker.onmessage = (
+      e: MessageEvent<{ type: 'frames'; bytes: ArrayBuffer }>
+    ) => {
+      if (e.data.type !== 'frames') return;
+      if (!header) header = e.data.bytes.slice(0); // first output carries STREAMINFO
+      broadcastFrame(e.data.bytes);
+    };
+    encoderWorker.postMessage({ type: 'init', params: STREAM_PARAMS });
 
-  captureSource = new MediaStreamAudioSourceNode(ctx, {
-    mediaStream: refs.micDestination.stream,
-  });
-  captureNode = new AudioWorkletNode(ctx, 'pcm-capture');
-  captureNode.port.onmessage = (e: MessageEvent<Float32Array[]>) => {
-    if (!blocker || !encoderWorker) return;
-    for (const block of blocker.push(e.data)) {
-      encoderWorker.postMessage({ type: 'block', block }, [block.buffer]);
-    }
-  };
-  captureSource.connect(captureNode);
-  // Keep the node pulled by the graph. The capture processor never writes to
-  // its outputs, so this connection emits silence (no local echo).
-  captureNode.connect(ctx.destination);
+    captureSource = new MediaStreamAudioSourceNode(ctx, {
+      mediaStream: refs.micDestination.stream,
+    });
+    captureNode = new AudioWorkletNode(ctx, 'pcm-capture');
+    captureNode.port.onmessage = (e: MessageEvent<Float32Array[]>) => {
+      if (!blocker || !encoderWorker) return;
+      for (const block of blocker.push(e.data)) {
+        encoderWorker.postMessage({ type: 'block', block }, [block.buffer]);
+      }
+    };
+    captureSource.connect(captureNode);
+    // Keep the node pulled by the graph. The capture processor never writes to
+    // its outputs, so this connection emits silence (no local echo).
+    captureNode.connect(ctx.destination);
+  } catch (err) {
+    // Roll back any partial setup and stay on Opus.
+    captureNode?.disconnect();
+    captureSource?.disconnect();
+    encoderWorker?.terminate();
+    captureNode = null;
+    captureSource = null;
+    encoderWorker = null;
+    blocker = null;
+    header = null;
+    throw err;
+  }
 
-  // Detach the Opus uplink for every peer (updateTransmission keeps it
-  // detached while the codec is 'flac'), then announce the FLAC stream.
+  // Commit: switch the codec, detach the Opus uplink for every peer
+  // (updateTransmission keeps it detached while the codec is 'flac'), and
+  // announce the FLAC stream.
+  refs.audioCodec = 'flac';
   updateTransmission();
   for (const peer of refs.peers.values()) {
     sendStart(peer.audioChannel);

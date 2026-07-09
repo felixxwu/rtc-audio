@@ -19,8 +19,9 @@ let moduleAdded = false;
 
 async function ensurePlaybackModule(ctx: AudioContext) {
   if (moduleAdded) return;
+  // Served from public/ as plain JS (see the worklet file for why).
   await ctx.audioWorklet.addModule(
-    new URL('./pcm-playback.worklet.ts', import.meta.url)
+    `${import.meta.env.BASE_URL}pcm-playback.worklet.js`
   );
   moduleAdded = true;
 }
