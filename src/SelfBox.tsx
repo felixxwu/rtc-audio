@@ -25,10 +25,6 @@ import {
   MicHalf,
   MicFull,
   MicOff,
-  SpeakerLoud,
-  SpeakerMedium,
-  SpeakerQuiet,
-  SpeakerOff,
   MusicNote,
   MusicNoteOff,
   ScreenShare,
@@ -82,7 +78,6 @@ function IconSlider({
 
 export function SelfBox({ stats }: { stats: Stats }) {
   const [micVolume, setMicVolume] = useState(refs.micVolume);
-  const [speakerVolume, setSpeakerVolume] = useState(refs.speakerVolume);
   const [shareVolume, setShareVolume] = useState(refs.shareVolume);
   const [sharingVideo, setSharingVideo] = useState(refs.shareVideoTrack !== null);
   const [hasShareAudio, setHasShareAudio] = useState(refs.shareStream !== null);
@@ -139,12 +134,6 @@ export function SelfBox({ stats }: { stats: Stats }) {
   }, [micVolume]);
 
   useEffect(() => {
-    refs.speakerVolume = speakerVolume;
-    refs.peers.forEach((peer) => (peer.audio.volume = speakerVolume));
-    saveVolume('speaker', speakerVolume);
-  }, [speakerVolume]);
-
-  useEffect(() => {
     refs.shareVolume = shareVolume;
     if (refs.shareGainNode) refs.shareGainNode.gain.value = shareVolume;
     saveVolume('share', shareVolume);
@@ -155,10 +144,6 @@ export function SelfBox({ stats }: { stats: Stats }) {
     micVolume === 0
       ? MicOff
       : [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];
-  const speakerIcon =
-    speakerVolume === 0
-      ? SpeakerOff
-      : [SpeakerQuiet, SpeakerMedium, SpeakerLoud][Math.round(speakerVolume * 2)];
 
   const handleShareToggle = async () => {
     if (sharingVideo || hasShareAudio) {
@@ -222,13 +207,6 @@ export function SelfBox({ stats }: { stats: Stats }) {
               onChange={setMicVolume}
               onToggle={() => setMicVolume(micVolume === 0 ? 1 : 0)}
               title="Microphone"
-            />
-            <IconSlider
-              path={speakerIcon}
-              value={speakerVolume}
-              onChange={setSpeakerVolume}
-              onToggle={() => setSpeakerVolume(speakerVolume === 0 ? 1 : 0)}
-              title="Speaker"
             />
             <IconSlider
               path={shareVolume === 0 ? MusicNoteOff : MusicNote}
