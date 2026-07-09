@@ -130,8 +130,8 @@ export function SettingsPopup({
       <Field>
         <Label>Connection</Label>
         <Stat>
-          Audio ↓ {bitrateKbps} ↑ {outgoingKbps.reduce((s, k) => s + k, 0)}
-          {outgoingKbps.length > 1 && ` (${outgoingKbps.join(' + ')})`} kb/s
+          Audio ↓ {bitrateKbps} ↑ {outgoingKbps.reduce((s, k) => s + k, 0)}{' '}
+          kb/s
           <br />
           Total ↓ {totalInKbps} ↑ {totalOutKbps} kb/s
           <br />

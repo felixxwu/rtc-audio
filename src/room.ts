@@ -179,6 +179,8 @@ function createPeer(peerId: string) {
       dataBytesSent: 0,
       audioDataBytes: 0,
       audioDataBytesSent: 0,
+      inKbps: 0,
+      outKbps: 0,
       ts: 0,
       lost: 0,
       received: 0,

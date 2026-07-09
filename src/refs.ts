@@ -41,6 +41,9 @@ export type Peer = {
     // so lossless audio is reported as audio, not lumped into data/total only.
     audioDataBytes: number;
     audioDataBytesSent: number;
+    // Latest computed per-peer audio rates (kb/s), for the participant tiles.
+    inKbps: number;
+    outKbps: number;
     ts: number;
     lost: number;
     received: number;

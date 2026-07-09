@@ -90,6 +90,8 @@ export function AppContent() {
           if (timestamp === undefined) return;
           const elapsedMs = timestamp - peer.stats.ts;
           if (peer.stats.ts > 0 && elapsedMs > 0) {
+            // Per-peer audio downlink = Opus RTP in + FLAC data-channel in.
+            let peerInKbps = 0;
             if (inboundAudio) {
               const {
                 bytesReceived,
@@ -97,7 +99,7 @@ export function AppContent() {
                 packetsReceived = 0,
                 jitter = 0,
               } = inboundAudio;
-              totalKbps += Math.max(
+              peerInKbps += Math.max(
                 0,
                 Math.round(
                   ((bytesReceived - peer.stats.bytes) * 8) / elapsedMs
@@ -119,13 +121,14 @@ export function AppContent() {
             }
             // FLAC audio arrives on the 'audio' data channel — count it as
             // audio-in alongside any Opus RTP audio.
-            totalKbps += Math.max(
+            peerInKbps += Math.max(
               0,
               Math.round(
                 ((audioDataReceived - peer.stats.audioDataBytes) * 8) /
                   elapsedMs
               )
             );
+            totalKbps += peerInKbps;
             // Per-peer audio uplink = Opus RTP out + FLAC data-channel out
             // (only one is non-zero, depending on the active codec).
             const rtpOutKbps = outboundAudio
@@ -144,7 +147,11 @@ export function AppContent() {
                   elapsedMs
               )
             );
-            outgoing.push(rtpOutKbps + flacOutKbps);
+            const peerOutKbps = rtpOutKbps + flacOutKbps;
+            outgoing.push(peerOutKbps);
+            // Expose per-peer audio rates for the participant tiles.
+            peer.stats.inKbps = peerInKbps;
+            peer.stats.outKbps = peerOutKbps;
             if (inboundVideo) {
               videoInKbps += Math.max(
                 0,

@@ -97,6 +97,12 @@ export function ParticipantBox({ id }: { id: string }) {
       ? SpeakerOff
       : [SpeakerQuiet, SpeakerMedium, SpeakerLoud][Math.round(volume * 2)];
 
+  // Live per-peer audio rates (updated by the stats poll). Shown only when not
+  // sharing and not hovered (hover reveals the volume slider instead).
+  const stats = refs.peers.get(id)?.stats;
+  const inKbps = stats?.inKbps ?? 0;
+  const outKbps = stats?.outKbps ?? 0;
+
   return (
     <Box
       ref={borderRef}
@@ -107,6 +113,14 @@ export function ParticipantBox({ id }: { id: string }) {
         <Thumb ref={videoRef} autoPlay playsInline muted />
       ) : (
         <Circle style={{ background: circleColor(id) }}>{letterFor(id)}</Circle>
+      )}
+
+      {/* Live bitrate, tucked near the bottom edge. Hidden while sharing (no
+          Circle then) and on hover (the volume slider takes over). */}
+      {!sharing && (
+        <Rate data-rate>
+          ↓ {inKbps} ↑ {outKbps} kb/s
+        </Rate>
       )}
 
       {/* Per-participant volume, revealed on hover. stopPropagation so tweaking
@@ -152,6 +166,15 @@ const Box = styled('div')<{ $clickable?: boolean }>`
     opacity: 1;
     pointer-events: auto;
   }
+  /* Bitrate is the inverse of the volume bar: shown by default, hidden while
+     hovering so it doesn't clash with the revealed slider. */
+  & [data-rate] {
+    opacity: 1;
+    transition: opacity 0.12s;
+  }
+  &:hover [data-rate] {
+    opacity: 0;
+  }
 `;
 
 const Circle = styled('div')`
@@ -170,6 +193,18 @@ const Thumb = styled('video')`
   width: 100%;
   height: 100%;
   object-fit: cover;
+`;
+
+const Rate = styled('div')`
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: #555;
+  pointer-events: none;
 `;
 
 const VolumeBar = styled('div')`
