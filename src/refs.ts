@@ -15,6 +15,9 @@ export type Peer = {
   videoStream: MediaStream | null;
   // Whether the remote peer asked to watch our shared screen.
   remoteWatching: boolean;
+  // Whether the remote peer opened the full-screen view and wants full quality
+  // (vs the downscaled thumbnail tier everyone gets by default).
+  remoteFullQuality: boolean;
   connDoc: firebase.firestore.DocumentReference | null;
   audio: HTMLAudioElement;
   // Per-connection stats deltas (bitrate/loss/jitter are computed from the
@@ -108,6 +111,8 @@ export const refs = {
   shareVideoTrack: <MediaStreamTrack | null>null,
   // Other peers currently sharing video, from their presence docs.
   sharingPeers: new Set<string>(),
+  // Peer ids (including our own) sorted by joinedAt, for letter assignment.
+  participantOrder: <string[]>[],
   // When our own screen share started (client ms), 0 if not sharing. Used to
   // resolve exclusive sharing: the most recent share wins.
   mySharingSince: 0,

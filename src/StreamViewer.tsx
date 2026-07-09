@@ -1,8 +1,9 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { refs } from './refs.ts';
-import { myPeerId, setWatching } from './room.ts';
+import { myPeerId, setFullQuality } from './room.ts';
 import { Button } from './Button.tsx';
+import { consumeRequest, onRequest } from './viewerControl.ts';
 import {
   colorForPeer,
   cursors,
@@ -20,34 +21,22 @@ type Mode = null | 'watch' | 'host';
 // capture — both render everyone's cursors, since the sharer relays them.
 export function StreamViewer() {
   const [sharerId, setSharerId] = useState<string | null>(null);
-  const [amSharing, setAmSharing] = useState(refs.shareVideoTrack !== null);
   const [mode, setMode] = useState<Mode>(null);
   const [showClose, setShowClose] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const watchingRef = useRef<string | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Poll module state for role + availability (no event plumbing needed at
-  // this scale), and close the overlay if what it shows goes away.
+  // this scale), and close the overlay if what it shows goes away. The watch
+  // request itself is owned by ParticipantBox, so the stream is already
+  // flowing before the overlay opens.
   useEffect(() => {
     const interval = setInterval(() => {
       const sharing = refs.shareVideoTrack !== null;
-      setAmSharing(sharing);
       const otherSharer = [...refs.sharingPeers][0] ?? null;
       setSharerId(otherSharer);
-
-      // Follow the single active share: if we're watching and someone took
-      // over (sharer changed) or the share stopped, retarget or close.
-      if (watchingRef.current && watchingRef.current !== otherSharer) {
-        setWatching(watchingRef.current, false);
-        if (otherSharer) {
-          setWatching(otherSharer, true);
-          watchingRef.current = otherSharer;
-        } else {
-          watchingRef.current = null;
-          setMode((m) => (m === 'watch' ? null : m));
-        }
-      }
+      // Close the watch overlay if the share we're viewing ended.
+      setMode((m) => (m === 'watch' && !otherSharer ? null : m));
       // Close the host pointer view if our own share ended.
       setMode((m) => (m === 'host' && !sharing ? null : m));
     }, 1000);
@@ -87,22 +76,34 @@ export function StreamViewer() {
     return () => clearInterval(interval);
   }, [mode, sharerId]);
 
+  // The stream is already being watched (ParticipantBox requested it), so
+  // opening the full view is just showing the overlay.
   const openWatch = () => {
     if (!sharerId) return;
-    setWatching(sharerId, true);
-    watchingRef.current = sharerId;
     setMode('watch');
   };
 
   const openHost = () => setMode('host');
 
-  const close = () => {
-    if (watchingRef.current) {
-      setWatching(watchingRef.current, false);
-      watchingRef.current = null;
-    }
-    setMode(null);
-  };
+  const close = () => setMode(null);
+
+  // While the full-screen watch view is open, ask the sharer for full quality
+  // (the box only ever requests the thumbnail tier). Released on close or when
+  // the sharer changes.
+  useEffect(() => {
+    if (mode !== 'watch' || !sharerId) return;
+    setFullQuality(sharerId, true);
+    return () => setFullQuality(sharerId, false);
+  }, [mode, sharerId]);
+
+  // External open requests from the participant boxes / self box.
+  useEffect(() => {
+    return onRequest(() => {
+      const view = consumeRequest();
+      if (view === 'watch') openWatch();
+      else if (view === 'host') openHost();
+    });
+  });
 
   const revealClose = () => {
     setShowClose(true);
@@ -125,23 +126,7 @@ export function StreamViewer() {
     if (point) sendPing(point.x, point.y);
   };
 
-  if (!mode) {
-    if (amSharing) {
-      return (
-        <p>
-          <Button onClick={openHost}>View pointers</Button>
-        </p>
-      );
-    }
-    if (sharerId) {
-      return (
-        <p>
-          <Button onClick={openWatch}>View shared screen</Button>
-        </p>
-      );
-    }
-    return null;
-  }
+  if (!mode) return null;
 
   return (
     <Overlay onPointerMove={handlePointerMove}>

@@ -2,6 +2,7 @@ import firebase from 'firebase/app';
 import { firestore } from './firebase.ts';
 import { enhanceAudioSdp, servers } from './pc.ts';
 import { refs, type Peer } from './refs.ts';
+import { releaseMeter } from './audioLevels.ts';
 import { updateTransmission } from './transmission.ts';
 import { keepAwake } from './wakeLock.ts';
 import { cursors, handleCursorMessage } from './cursors.ts';
@@ -142,6 +143,7 @@ function createPeer(peerId: string) {
     fileChannel,
     videoStream: <MediaStream | null>null,
     remoteWatching: false,
+    remoteFullQuality: false,
     connDoc: <firebase.firestore.DocumentReference | null>null,
     audio,
     stats: {
@@ -177,13 +179,20 @@ export function updateVideoTransmission() {
       entry.remoteWatching && refs.shareVideoTrack
         ? refs.shareVideoTrack
         : null;
-    if (entry.videoSender.track === track) continue;
-    entry.videoSender.replaceTrack(track).catch(console.error);
+    if (entry.videoSender.track !== track) {
+      entry.videoSender.replaceTrack(track).catch(console.error);
+    }
+    // Set the encoding tier every time (not just on track change) so a pair
+    // can be bumped between thumbnail and full quality without detaching.
+    // Full: native resolution, 500 kbps. Thumbnail: quarter resolution each
+    // axis, 150 kbps — plenty for a ~280px box, a fraction of the bandwidth.
     if (track) {
       const params = entry.videoSender.getParameters();
       params.degradationPreference = 'maintain-resolution';
+      const full = entry.remoteFullQuality;
       params.encodings.forEach((encoding) => {
-        encoding.maxBitrate = 500_000;
+        encoding.maxBitrate = full ? 500_000 : 150_000;
+        encoding.scaleResolutionDownBy = full ? 1 : 4;
       });
       entry.videoSender.setParameters(params).catch(console.error);
     }
@@ -195,6 +204,15 @@ export function setWatching(peerId: string, watching: boolean) {
   refs.peers
     .get(peerId)
     ?.connDoc?.update({ [`watching.${myPeerId}`]: watching })
+    .catch(console.error);
+}
+
+// Ask `peerId` for full-quality (vs thumbnail) video — set while we have their
+// share open full-screen.
+export function setFullQuality(peerId: string, full: boolean) {
+  refs.peers
+    .get(peerId)
+    ?.connDoc?.update({ [`fullQuality.${myPeerId}`]: full })
     .catch(console.error);
 }
 
@@ -215,6 +233,7 @@ function applyRemoteWatching(
   remotePeerId: string
 ) {
   entry.remoteWatching = !!data.watching?.[remotePeerId];
+  entry.remoteFullQuality = !!data.fullQuality?.[remotePeerId];
   updateVideoTransmission();
 }
 
@@ -240,6 +259,7 @@ export function closePeer(peerId: string) {
   entry.pc.close();
   entry.audio.srcObject = null;
   refs.peers.delete(peerId);
+  releaseMeter(peerId);
   cursors.delete(peerId);
   peerDisconnected(peerId);
 }
@@ -502,6 +522,18 @@ export async function joinRoom(
         .map((doc) => doc.id)
     );
 
+    // Ordered participant list for letters: everyone with a resolved joinedAt
+    // (ourselves included), earliest first, peerId as the tiebreak.
+    refs.participantOrder = snapshot.docs
+      .filter((doc) => doc.data().joinedAt)
+      .sort((a, b) => {
+        const diff =
+          (a.data().joinedAt as Timestamp).toMillis() -
+          (b.data().joinedAt as Timestamp).toMillis();
+        return diff !== 0 ? diff : a.id < b.id ? -1 : 1;
+      })
+      .map((doc) => doc.id);
+
     // Exclusive screen sharing: if another peer's share is newer than ours,
     // stop ours so the newcomer's is the only one. Ties break on peerId so
     // both sides agree on who yields.
@@ -565,16 +597,33 @@ export async function joinRoom(
       });
     });
 
-  // Best-effort cleanup so the room converges quickly on graceful exits.
-  // Ungraceful exits fall back to each pair's ICE failure handling; the
-  // orphaned presence doc is harmless.
-  window.addEventListener('pagehide', () => {
+  // Best-effort cleanup so the room converges quickly on graceful exits:
+  // delete our connection docs and presence doc. Ungraceful exits fall back to
+  // each pair's ICE failure handling; the orphaned presence doc is harmless.
+  const publishExit = () => {
     for (const peerId of refs.peers.keys()) {
       connectionsCol.doc(`${myPeerId}_${peerId}`).delete().catch(() => {});
       connectionsCol.doc(`${peerId}_${myPeerId}`).delete().catch(() => {});
     }
     peersCol.doc(myPeerId).delete().catch(() => {});
-  });
+  };
+  window.addEventListener('pagehide', publishExit);
+
+  // Explicit "leave" from the UI: publish the exit, tear down every peer
+  // connection and the heartbeat, then reload to the home screen (which drops
+  // the ?id and unwinds all Firestore subscriptions).
+  leaveRoomImpl = () => {
+    publishExit();
+    clearInterval(heartbeatTimer);
+    for (const peerId of [...refs.peers.keys()]) closePeer(peerId);
+    window.location.assign(window.location.origin);
+  };
 
   return '';
+}
+
+let leaveRoomImpl: (() => void) | null = null;
+
+export function leaveRoom(): void {
+  leaveRoomImpl?.();
 }

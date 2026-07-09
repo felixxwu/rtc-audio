@@ -35,3 +35,4 @@ specs/*.md
 service-account.json
 *-service-account.json
 *serviceaccount*.json
+docs/**/*.md

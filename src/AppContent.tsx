@@ -1,23 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { joinRoom } from './room.ts';
 import { EnableAudio } from './EnableAudio.tsx';
 import { CreateSession } from './CreateSession.tsx';
-import { PlayingIcon } from './PlayingIcon.tsx';
-import { VolumeControls } from './VolumeControls.tsx';
-import { ShareAudioControls } from './ShareAudioControls.tsx';
 import { StreamViewer } from './StreamViewer.tsx';
-import { FileControls } from './FileControls.tsx';
 import { BrowserNotice } from './BrowserNotice.tsx';
+import { ParticipantGrid } from './ParticipantGrid.tsx';
+import { SelfBox } from './SelfBox.tsx';
+import type { Stats } from './SettingsPopup.tsx';
 import styled from 'styled-components';
-import { colors } from './colors.ts';
 import { refs } from './refs.ts';
-import { Button } from './Button.tsx';
 
 export function AppContent() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [error, setError] = useState('');
   const [id, setId] = useState('');
-  const [connectedCount, setConnectedCount] = useState(0);
   const [bitrateKbps, setBitrateKbps] = useState(0);
   const [outgoingKbps, setOutgoingKbps] = useState<number[]>([]);
   const [totalInKbps, setTotalInKbps] = useState(0);
@@ -26,15 +22,10 @@ export function AppContent() {
   const [jitterMs, setJitterMs] = useState(0);
   const params = new URLSearchParams(document.location.search);
   const paramId = params.get('id');
-  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const [copyLinkButtonText, setCopyLinkButtonText] = useState('Copy link');
 
   useEffect(() => {
     const interval = setInterval(async () => {
       const peers = [...refs.peers.values()];
-      setConnectedCount(
-        peers.filter((peer) => peer.pc.connectionState === 'connected').length
-      );
 
       // Aggregate stats: bitrate is summed across peers; loss and jitter
       // report the worst pair. Deltas are computed per-pc from the report's
@@ -224,66 +215,55 @@ export function AppContent() {
 
   const link = `${window.location.origin}/?id=${id}`;
 
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-
-      clearTimeout(timeoutRef.current);
-      setCopyLinkButtonText('Link copied');
-      timeoutRef.current = setTimeout(() => {
-        setCopyLinkButtonText('Copy link');
-      }, 2000);
-    } catch (e) {
-      console.error(e);
-
-      clearTimeout(timeoutRef.current);
-      setCopyLinkButtonText('Failed to copy');
-      timeoutRef.current = setTimeout(() => {
-        setCopyLinkButtonText('Copy link');
-      }, 2000);
-    }
+  const stats: Stats = {
+    bitrateKbps,
+    outgoingKbps,
+    totalInKbps,
+    totalOutKbps,
+    packetLossPercent,
+    jitterMs,
   };
 
   return (
     <>
       <BrowserNotice />
-      {connectedCount > 0 && <PlayingIcon />}
-      <p>
-        {connectedCount === 0
-          ? 'Waiting for others to join...'
-          : `Connected to ${connectedCount} peer${
-              connectedCount === 1 ? '' : 's'
-            }.`}
-      </p>
-      <div>Invite someone to join the session:</div>
-      <Link>{link}</Link>
-      <p>
-        <Button onClick={handleCopyLink}>{copyLinkButtonText}</Button>
-      </p>
-      {connectedCount > 0 && (
-        <>
-          <VolumeControls />
-          <ShareAudioControls />
-          <StreamViewer />
-          <FileControls />
-          <p>
-            Audio ↓ {bitrateKbps} ↑{' '}
-            {outgoingKbps.reduce((sum, kbps) => sum + kbps, 0)}
-            {outgoingKbps.length > 1 && ` (${outgoingKbps.join(' + ')})`} kb/s
-            <br />
-            Total ↓ {totalInKbps} ↑ {totalOutKbps} kb/s
-            <br />
-            Packet loss: {packetLossPercent}% | Jitter: {jitterMs} ms
-          </p>
-        </>
-      )}
+      <Session>
+        <GridArea>
+          <ParticipantGrid link={link} />
+        </GridArea>
+        <Dock>
+          <SelfBox stats={stats} />
+        </Dock>
+      </Session>
+      <StreamViewer />
     </>
   );
 }
 
-const Link = styled('div')`
-  color: ${colors.accent2};
-  text-decoration: underline;
-  cursor: pointer;
-  user-select: all;
+// Full-height column: grid area flexes to fill, the dock is pinned at the
+// bottom as its own visually distinct (darker) section.
+const Session = styled('div')`
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+const GridArea = styled('div')`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+`;
+
+const Dock = styled('div')`
+  flex-shrink: 0;
+  background: #181818;
+  border-top: 1px solid #000;
+  padding: 16px 12px;
+  display: flex;
+  justify-content: center;
 `;

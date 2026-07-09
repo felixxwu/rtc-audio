@@ -6,11 +6,11 @@ export const Button = styled('button')`
   padding: 10px 20px;
   border-radius: 100vw;
   border: none;
-  background-color: ${colors.accent};
-  color: ${colors.bg};
+  background-color: ${colors.border};
+  color: #fff;
   cursor: pointer;
 
   &:hover {
-    background-color: ${colors.accent2};
+    background-color: #949494;
   }
 `;

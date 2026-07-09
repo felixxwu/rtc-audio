@@ -1,5 +1,6 @@
 import { refs } from './refs.ts';
 import { myPeerId } from './room.ts';
+import { hue } from './participantColor.ts';
 
 // Live collaborative pointers over the shared screen. Positions travel on a
 // per-pair WebRTC data channel (unreliable/unordered — newest wins, a lost
@@ -123,11 +124,7 @@ export function sendPing(x: number, y: number) {
 
 // A stable, distinct colour per peer (no names in the app yet).
 export function colorForPeer(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) % 360;
-  }
-  return `hsl(${hash} 85% 60%)`;
+  return `hsl(${hue(id)} 85% 60%)`;
 }
 
 // The letterboxed rectangle the video actually occupies inside its element
