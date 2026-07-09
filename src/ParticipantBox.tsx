@@ -66,6 +66,32 @@ export function ParticipantBox({ id }: { id: string }) {
     }
   });
 
+  // Recover a stuck (black) share. If packets are arriving (the track is live
+  // and unmuted) but nothing has decoded — videoWidth still 0 — the viewer
+  // most likely missed the first keyframe. Briefly drop and re-request the
+  // watch so the sender re-attaches its track and emits a fresh keyframe.
+  // Bounded so a genuinely dead share doesn't toggle forever.
+  useEffect(() => {
+    if (!sharing) return;
+    let nudges = 0;
+    const interval = setInterval(() => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (v.videoWidth > 0) {
+        nudges = 0; // decoding fine — reset the budget
+        return;
+      }
+      const track = refs.peers.get(id)?.videoStream?.getVideoTracks()[0] ?? null;
+      const flowing = !!track && track.readyState === 'live' && !track.muted;
+      if (flowing && nudges < 3) {
+        nudges++;
+        setWatching(id, false);
+        setTimeout(() => setWatching(id, true), 300);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [id, sharing]);
+
   const speakerIcon =
     volume === 0
       ? SpeakerOff

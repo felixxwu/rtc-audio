@@ -418,9 +418,11 @@ async function offerTo(peerId: string, connectionsCol: CollectionRef) {
 async function answerOffer(
   offererId: string,
   connDoc: DocRef,
-  offer: RTCSessionDescriptionInit
+  offer: RTCSessionDescriptionInit,
+  data: firebase.firestore.DocumentData
 ) {
   let entry = refs.peers.get(offererId);
+  const isNew = !entry;
   if (!entry) {
     entry = createPeer(offererId);
     entry.connDoc = connDoc;
@@ -443,6 +445,11 @@ async function answerOffer(
       })
     );
   }
+
+  // On first creation the connections listener couldn't apply the peer's
+  // watch request (the peer didn't exist yet) and may not fire again for that
+  // field — so apply the doc's current watching/fullQuality state now.
+  if (isNew) applyRemoteWatching(entry, data, offererId);
 
   await entry.pc.setRemoteDescription(new RTCSessionDescription(offer));
   flushPendingCandidates(entry);
@@ -626,7 +633,7 @@ export async function joinRoom(
           return;
         }
         answeredOfferSdp.set(offererId, data.offer.sdp);
-        answerOffer(offererId, change.doc.ref, data.offer).catch(
+        answerOffer(offererId, change.doc.ref, data.offer, data).catch(
           console.error
         );
       });
