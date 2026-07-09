@@ -3,7 +3,15 @@ import { refs } from './refs.ts';
 // Level source key for our own (post-mute) mic signal.
 export const SELF = '__self__';
 
-type Meter = { analyser: AnalyserNode; data: Float32Array };
+type Meter = {
+  analyser: AnalyserNode;
+  data: Float32Array;
+  // The stream this analyser is tapping. A peer's srcObject is swapped when it
+  // switches codec (Opus RTP stream <-> FLAC playback stream), so the meter
+  // must be rebuilt when this no longer matches the current srcObject.
+  stream: MediaStream;
+  source: MediaStreamAudioSourceNode;
+};
 const meters = new Map<string, Meter>();
 
 function streamFor(id: string): MediaStream | null {
@@ -13,18 +21,28 @@ function streamFor(id: string): MediaStream | null {
 }
 
 // Lazily build the analyser once the stream exists (peer streams arrive on
-// ontrack, after the box first renders). Not connected to destination — the
-// audio already plays through the peer's <audio> element.
+// ontrack, after the box first renders). Rebuilt if the peer's srcObject is
+// later swapped (codec switch) so the meter keeps tracking the live stream.
+// Not connected to destination — the audio already plays through the peer's
+// <audio> element.
 function ensureMeter(id: string): Meter | null {
-  const existing = meters.get(id);
-  if (existing) return existing;
   const ctx = refs.audioContext;
   const stream = streamFor(id);
   if (!ctx || !stream || stream.getAudioTracks().length === 0) return null;
+  const existing = meters.get(id);
+  if (existing && existing.stream === stream) return existing;
+  // Stream changed (or first build): tear down any stale source and rebuild.
+  existing?.source.disconnect();
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 1024;
-  ctx.createMediaStreamSource(stream).connect(analyser);
-  const meter = { analyser, data: new Float32Array(analyser.fftSize) };
+  const source = ctx.createMediaStreamSource(stream);
+  source.connect(analyser);
+  const meter = {
+    analyser,
+    data: new Float32Array(analyser.fftSize),
+    stream,
+    source,
+  };
   meters.set(id, meter);
   return meter;
 }
