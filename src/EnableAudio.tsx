@@ -11,11 +11,13 @@ export function EnableAudio({
 }: {
   setAudioEnabled: (enabled: boolean) => void;
 }) {
-  const [permissionDenied, setPermissionDenied] = useState(false);
   const [error, setError] = useState('');
 
   const handleEnableAudio = async () => {
     try {
+      if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+        throw new MicUnavailableError();
+      }
       // Use the remembered input device (e.g. an interface loopback) if one
       // was chosen; otherwise the system default. Falls back to default if
       // the remembered device is no longer available.
@@ -77,21 +79,60 @@ export function EnableAudio({
       setAudioEnabled(true);
     } catch (e) {
       console.error(e);
-      setError((e as Error).message);
-      setPermissionDenied(true);
+      setError(friendlyMicError(e));
     }
   };
 
-  if (permissionDenied) {
+  if (error) {
     return (
       <PermissionDenied>
-        Permission denied. Please enable audio in your browser settings.
         {error}
+        <Button onClick={handleEnableAudio}>Try again</Button>
       </PermissionDenied>
     );
   }
 
   return <Button onClick={handleEnableAudio}>Enable Audio</Button>;
+}
+
+// getUserMedia doesn't exist — insecure (http) context or an unsupported
+// browser, since a secure context always exposes it.
+class MicUnavailableError extends Error {
+  constructor() {
+    super('MicUnavailable');
+    this.name = 'MicUnavailableError';
+  }
+}
+
+// Turn a getUserMedia rejection into something a user can act on. The error
+// name is a stable, spec-defined enum; the raw .message is browser-specific
+// and too technical to show.
+function friendlyMicError(e: unknown): string {
+  const name = (e as Error).name;
+  switch (name) {
+    case 'MicUnavailableError':
+    case 'NotSupportedError':
+      return (
+        "This browser can't access a microphone. Use a recent browser over " +
+        'a secure (https) connection.'
+      );
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return (
+        'Microphone access was blocked. Please allow microphone access in ' +
+        'your browser settings and try again.'
+      );
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'No microphone was found. Please connect one and try again.';
+    case 'NotReadableError':
+      return (
+        "Your microphone couldn't be started — it may be in use by another " +
+        'app. Close anything else using it and try again.'
+      );
+    default:
+      return "Couldn't enable audio. Please check your microphone and try again.";
+  }
 }
 
 const PermissionDenied = styled('p')`

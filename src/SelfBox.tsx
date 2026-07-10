@@ -11,6 +11,7 @@ import { requestView } from './viewerControl.ts';
 import { SettingsPopup, type Stats } from './SettingsPopup.tsx';
 import {
   NoAudioTrackError,
+  ShareUnsupportedError,
   startShareAudio,
   stopShareAudio,
 } from './shareAudio.ts';
@@ -150,10 +151,17 @@ export function SelfBox({
           'Nothing to share from the selected source. For audio, pick a ' +
             'tab or window and tick "Also share audio" in the dialog.'
         );
+      } else if (e instanceof ShareUnsupportedError) {
+        setHint(e.message);
       } else if ((e as Error).name !== 'NotAllowedError') {
         // NotAllowedError is the user cancelling the picker — not an error.
+        // Anything else is unexpected: log the technical detail for
+        // debugging but show the user something they can act on.
         console.error(e);
-        setHint((e as Error).message);
+        setHint(
+          "Couldn't start screen sharing. Please try again, or use a " +
+            'different browser if the problem continues.'
+        );
       }
     }
   };

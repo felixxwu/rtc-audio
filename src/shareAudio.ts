@@ -16,11 +16,29 @@ export class NoAudioTrackError extends Error {
   }
 }
 
+// Thrown when the browser can't share a screen or tab at all — e.g. iOS
+// Safari, or any browser served over plain HTTP (getDisplayMedia needs a
+// secure context). Carries a message safe to show the user directly.
+export class ShareUnsupportedError extends Error {
+  constructor() {
+    super(
+      "This browser can't share a screen or tab. Screen sharing needs a " +
+        'desktop browser like Chrome, Edge, or Firefox over a secure (https) ' +
+        'connection.'
+    );
+    this.name = 'ShareUnsupportedError';
+  }
+}
+
 // Capture a tab's or window's audio and screen video via the share picker.
 // Audio is mixed into the outgoing track alongside the mic; video is held
 // locally and only transmitted, per pair, to peers who ask to watch
 // (see updateVideoTransmission).
 export async function startShareAudio(onEnded: () => void) {
+  if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
+    throw new ShareUnsupportedError();
+  }
+
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: {
       // Sheet music / DAW views are mostly static: a low frame rate keeps
