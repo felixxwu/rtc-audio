@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { refs } from './refs.ts';
 import { myPeerId, setFullQuality } from './room.ts';
+import { attachTrack } from './videoTrack.ts';
 import { Button } from './Button.tsx';
 import { consumeRequest, onRequest } from './viewerControl.ts';
 import {
@@ -35,10 +36,13 @@ export function StreamViewer() {
       const sharing = refs.shareVideoTrack !== null;
       const otherSharer = [...refs.sharingPeers][0] ?? null;
       setSharerId(otherSharer);
-      // Close the watch overlay if the share we're viewing ended.
-      setMode((m) => (m === 'watch' && !otherSharer ? null : m));
-      // Close the host pointer view if our own share ended.
-      setMode((m) => (m === 'host' && !sharing ? null : m));
+      // Close the overlay if what it shows ended: the watched share for a
+      // viewer, or our own share for the host.
+      setMode((m) => {
+        if (m === 'watch' && !otherSharer) return null;
+        if (m === 'host' && !sharing) return null;
+        return m;
+      });
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -50,26 +54,13 @@ export function StreamViewer() {
     const attach = () => {
       const video = videoRef.current;
       if (!video) return;
-      // Compare the underlying track, not the MediaStream object: host mode
-      // would otherwise wrap the same track in a fresh MediaStream every
-      // poll, reassigning srcObject and making the element reload (flash).
       const track =
         mode === 'host'
           ? refs.shareVideoTrack
           : (sharerId &&
               refs.peers.get(sharerId)?.videoStream?.getVideoTracks()[0]) ||
             null;
-      const current =
-        video.srcObject instanceof MediaStream
-          ? video.srcObject.getVideoTracks()[0] ?? null
-          : null;
-      if (track !== current) {
-        video.srcObject = track ? new MediaStream([track]) : null;
-      }
-      // Autoplay doesn't reliably fire on a programmatic srcObject set, so
-      // kick playback explicitly (muted, so no gesture needed). Harmless if
-      // already playing.
-      if (video.srcObject && video.paused) video.play().catch(() => {});
+      attachTrack(video, track);
     };
     attach();
     const interval = setInterval(attach, 500);

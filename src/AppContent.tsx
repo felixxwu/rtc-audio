@@ -100,6 +100,11 @@ export function AppContent({
           if (timestamp === undefined) return;
           const elapsedMs = timestamp - peer.stats.ts;
           if (peer.stats.ts > 0 && elapsedMs > 0) {
+            // Byte delta → kbps over this report's actual elapsed window,
+            // floored at 0 (counters only ever grow, but a codec swap can
+            // reset the baseline to a larger value for one sample).
+            const rate = (curr: number, prev: number) =>
+              Math.max(0, Math.round(((curr - prev) * 8) / elapsedMs));
             // Per-peer audio downlink = Opus RTP in + FLAC data-channel in.
             let peerInKbps = 0;
             if (inboundAudio) {
@@ -109,12 +114,7 @@ export function AppContent({
                 packetsReceived = 0,
                 jitter = 0,
               } = inboundAudio;
-              peerInKbps += Math.max(
-                0,
-                Math.round(
-                  ((bytesReceived - peer.stats.bytes) * 8) / elapsedMs
-                )
-              );
+              peerInKbps += rate(bytesReceived, peer.stats.bytes);
               const newLost = Math.max(0, packetsLost - peer.stats.lost);
               const newReceived = packetsReceived - peer.stats.received;
               const newTotal = newLost + newReceived;
@@ -131,31 +131,16 @@ export function AppContent({
             }
             // FLAC audio arrives on the 'audio' data channel — count it as
             // audio-in alongside any Opus RTP audio.
-            peerInKbps += Math.max(
-              0,
-              Math.round(
-                ((audioDataReceived - peer.stats.audioDataBytes) * 8) /
-                  elapsedMs
-              )
-            );
+            peerInKbps += rate(audioDataReceived, peer.stats.audioDataBytes);
             totalKbps += peerInKbps;
             // Per-peer audio uplink = Opus RTP out + FLAC data-channel out
             // (only one is non-zero, depending on the active codec).
             const rtpOutKbps = outboundAudio
-              ? Math.max(
-                  0,
-                  Math.round(
-                    ((outboundAudio.bytesSent - peer.stats.bytesSent) * 8) /
-                      elapsedMs
-                  )
-                )
+              ? rate(outboundAudio.bytesSent, peer.stats.bytesSent)
               : 0;
-            const flacOutKbps = Math.max(
-              0,
-              Math.round(
-                ((audioDataSent - peer.stats.audioDataBytesSent) * 8) /
-                  elapsedMs
-              )
+            const flacOutKbps = rate(
+              audioDataSent,
+              peer.stats.audioDataBytesSent
             );
             const peerOutKbps = rtpOutKbps + flacOutKbps;
             outgoing.push(peerOutKbps);
@@ -163,35 +148,19 @@ export function AppContent({
             peer.stats.inKbps = peerInKbps;
             peer.stats.outKbps = peerOutKbps;
             if (inboundVideo) {
-              videoInKbps += Math.max(
-                0,
-                Math.round(
-                  ((inboundVideo.bytesReceived - peer.stats.videoBytes) * 8) /
-                    elapsedMs
-                )
+              videoInKbps += rate(
+                inboundVideo.bytesReceived,
+                peer.stats.videoBytes
               );
             }
             if (outboundVideo) {
-              videoOutKbps += Math.max(
-                0,
-                Math.round(
-                  ((outboundVideo.bytesSent - peer.stats.videoBytesSent) * 8) /
-                    elapsedMs
-                )
+              videoOutKbps += rate(
+                outboundVideo.bytesSent,
+                peer.stats.videoBytesSent
               );
             }
-            dataInKbps += Math.max(
-              0,
-              Math.round(
-                ((dataBytesReceived - peer.stats.dataBytes) * 8) / elapsedMs
-              )
-            );
-            dataOutKbps += Math.max(
-              0,
-              Math.round(
-                ((dataBytesSent - peer.stats.dataBytesSent) * 8) / elapsedMs
-              )
-            );
+            dataInKbps += rate(dataBytesReceived, peer.stats.dataBytes);
+            dataOutKbps += rate(dataBytesSent, peer.stats.dataBytesSent);
           }
           peer.stats.ts = timestamp;
           if (inboundAudio) {

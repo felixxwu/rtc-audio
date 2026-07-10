@@ -4,7 +4,8 @@ import { refs } from './refs.ts';
 import { myPeerId } from './room.ts';
 import { SELF } from './audioLevels.ts';
 import { registerBox, unregisterBox } from './colorLoop.ts';
-import { letterFor } from './participants.ts';
+import { Avatar } from './Avatar.tsx';
+import { attachTrack } from './videoTrack.ts';
 import { requestView } from './viewerControl.ts';
 import { SettingsPopup, type Stats } from './SettingsPopup.tsx';
 import {
@@ -124,15 +125,7 @@ export function SelfBox({
   useEffect(() => {
     const v = videoRef.current;
     if (v && sharingVideo && refs.shareVideoTrack) {
-      const track = refs.shareVideoTrack;
-      const current =
-        v.srcObject instanceof MediaStream
-          ? v.srcObject.getVideoTracks()[0] ?? null
-          : null;
-      if (track !== current) {
-        v.srcObject = new MediaStream([track]);
-        v.play().catch(() => {});
-      }
+      attachTrack(v, refs.shareVideoTrack);
     }
   }, [sharingVideo]);
 
@@ -204,9 +197,7 @@ export function SelfBox({
                 onClick={() => requestView('host')}
               />
             ) : (
-              <Circle style={{ background: circleColor(myPeerId) }}>
-                {letterFor(myPeerId)}
-              </Circle>
+              <Avatar id={myPeerId} />
             )}
           </Top>
         </Box>
@@ -287,18 +278,6 @@ const Top = styled('div')`
   /* Match the box's inner radius (12px border-radius minus 3px border) on all
      corners so the video/circle never overlaps the reactive border. */
   border-radius: 9px;
-`;
-
-const Circle = styled('div')`
-  height: 48%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #111;
 `;
 
 const Thumb = styled('video')`

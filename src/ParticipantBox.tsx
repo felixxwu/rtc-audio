@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
 import { setWatching } from './room.ts';
-import { letterFor } from './participants.ts';
-import { circleColor } from './participantColor.ts';
+import { Avatar } from './Avatar.tsx';
 import { registerBox, unregisterBox } from './colorLoop.ts';
 import { requestView } from './viewerControl.ts';
 import {
@@ -112,7 +111,7 @@ export function ParticipantBox({ id }: { id: string }) {
       {sharing ? (
         <Thumb ref={videoRef} autoPlay playsInline muted />
       ) : (
-        <Circle style={{ background: circleColor(id) }}>{letterFor(id)}</Circle>
+        <Avatar id={id} />
       )}
 
       {/* Live bitrate, tucked near the bottom edge. Hidden while sharing (no
@@ -175,18 +174,6 @@ const Box = styled('div')<{ $clickable?: boolean }>`
   &:hover [data-rate] {
     opacity: 0;
   }
-`;
-
-const Circle = styled('div')`
-  height: 48%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #111;
 `;
 
 const Thumb = styled('video')`

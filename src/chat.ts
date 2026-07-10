@@ -58,7 +58,7 @@ export function insertMessages(msgs: ChatMessage[]): void {
   if (fresh.length === 0) return;
   fresh.forEach((m) => byId.add(m.id));
   messages = [...messages, ...fresh].sort((a, b) =>
-    a.sentAt - b.sentAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    before(a, b) ? -1 : before(b, a) ? 1 : 0
   );
   notify();
 }
