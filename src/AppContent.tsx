@@ -345,6 +345,7 @@ const Main = styled('div')`
   min-height: 0;
   display: flex;
   flex-direction: row;
+  position: relative;
 `;
 
 const GridArea = styled('div')`
@@ -357,15 +358,16 @@ const GridArea = styled('div')`
   justify-content: center;
 `;
 
-// Desktop: fixed-width side panel. Mobile (<700px): full-screen overlay above
-// the dock.
+// Desktop: fixed-width side panel beside the grid. Mobile (<700px): fills the
+// grid area full-width (covering the participants) but stays above the dock,
+// which lives below Main in the Session column.
 const ChatSlot = styled('div')`
   width: 500px;
   flex-shrink: 0;
   min-height: 0;
 
   @media (max-width: 700px) {
-    position: fixed;
+    position: absolute;
     inset: 0;
     width: auto;
     z-index: 40;

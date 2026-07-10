@@ -82,11 +82,67 @@ function FileRow({ msg }: { msg: FileMessage }) {
   );
 }
 
+// The composer owns its own draft state so typing a message doesn't re-render
+// (and re-linkify) the whole message list on every keystroke.
+function Composer() {
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!draft.trim()) return;
+    sendText(draft);
+    setDraft('');
+    setLocalTyping(false);
+  };
+
+  return (
+    <ComposerBar>
+      <IconButton onClick={() => inputRef.current?.click()} title="Attach files">
+        <Icon
+          path={Paperclip}
+          size={20}
+          color={colors.accent2}
+          strokeWidth={2.2}
+          transform="rotate(45 12 12)"
+        />
+      </IconButton>
+      <TextInput
+        rows={1}
+        value={draft}
+        placeholder="Message…"
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setLocalTyping(e.target.value.length > 0);
+        }}
+        onBlur={() => setLocalTyping(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = e.target.files ? Array.from(e.target.files) : [];
+          if (files.length) sendFiles(files);
+          e.target.value = '';
+        }}
+      />
+      <IconButton onClick={submit} title="Send">
+        <Icon path={Send} size={20} color={colors.accent2} />
+      </IconButton>
+    </ComposerBar>
+  );
+}
+
 export function ChatPanel({ onClose }: { onClose: () => void }) {
   const messages = useChatMessages();
-  const [draft, setDraft] = useState('');
   const [, tick] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   // Periodic tick so in-place transfer progress updates the file rows — but
@@ -110,13 +166,6 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   }, [messages.length]);
 
   const typing = getTypingIds();
-
-  const submit = () => {
-    if (!draft.trim()) return;
-    sendText(draft);
-    setDraft('');
-    setLocalTyping(false);
-  };
 
   return (
     <Panel>
@@ -163,47 +212,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
           `${typing.map(letterFor).join(', ')} ${typing.length === 1 ? 'is' : 'are'} typing…`}
       </TypingLine>
 
-      <Composer>
-        <IconButton onClick={() => inputRef.current?.click()} title="Attach files">
-          <Icon
-            path={Paperclip}
-            size={20}
-            color={colors.accent2}
-            strokeWidth={2.2}
-            transform="rotate(45 12 12)"
-          />
-        </IconButton>
-        <TextInput
-          rows={1}
-          value={draft}
-          placeholder="Message…"
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setLocalTyping(e.target.value.length > 0);
-          }}
-          onBlur={() => setLocalTyping(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            const files = e.target.files ? Array.from(e.target.files) : [];
-            if (files.length) sendFiles(files);
-            e.target.value = '';
-          }}
-        />
-        <IconButton onClick={submit} title="Send">
-          <Icon path={Send} size={20} color={colors.accent2} />
-        </IconButton>
-      </Composer>
+      <Composer />
     </Panel>
   );
 }
@@ -327,7 +336,7 @@ const TypingLine = styled('div')`
   opacity: 0.7;
   font-size: 0.85em;
 `;
-const Composer = styled('div')`
+const ComposerBar = styled('div')`
   display: flex;
   align-items: center;
   gap: 8px;

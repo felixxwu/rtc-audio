@@ -1,7 +1,13 @@
 // Hue is a stable hash of the peer id (same basis the cursor colour uses).
+// Cached because it's invariant per id but read on every colour-loop frame
+// (~60/s per participant) via boxColor.
+const hueCache = new Map<string, number>();
 export function hue(id: string): number {
+  const cached = hueCache.get(id);
+  if (cached !== undefined) return cached;
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+  hueCache.set(id, h);
   return h;
 }
 
