@@ -1,5 +1,5 @@
 import { refs } from './refs.ts';
-import { myPeerId } from './room.ts';
+import { myPeerId } from './identity.ts';
 import { hue } from './participantColor.ts';
 
 // Live collaborative pointers over the shared screen. Positions travel on a

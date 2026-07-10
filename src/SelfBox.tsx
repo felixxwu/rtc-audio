@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
 import { useRoom } from './roomStore.ts';
-import { myPeerId } from './room.ts';
+import { myPeerId } from './identity.ts';
 import { SELF } from './audioLevels.ts';
 import { registerBox, unregisterBox } from './colorLoop.ts';
 import { Avatar } from './Avatar.tsx';
-import { attachTrack } from './videoTrack.ts';
+import { useVideoTrack } from './videoTrack.ts';
 import { requestView } from './viewerControl.ts';
 import { SettingsPopup, type Stats } from './SettingsPopup.tsx';
 import {
@@ -16,8 +16,8 @@ import {
 } from './shareAudio.ts';
 import { Modal } from './Popup.tsx';
 import { Button } from './Button.tsx';
-import { reconcileTransmission } from './losslessSender.ts';
-import { saveVolume } from './volumeStorage.ts';
+import { applyMicVolume, applyShareVolume } from './localVolume.ts';
+import { levelIcon } from './levelIcon.ts';
 import { circleColor } from './participantColor.ts';
 import { colors } from './colors.ts';
 import {
@@ -116,31 +116,17 @@ export function SelfBox({
   }, []);
 
   // Feed our own screen capture into the thumbnail.
-  useEffect(() => {
-    const v = videoRef.current;
-    if (v && sharingVideo && refs.shareVideoTrack) {
-      attachTrack(v, refs.shareVideoTrack);
-    }
-  }, [sharingVideo]);
+  useVideoTrack(videoRef, () => refs.shareVideoTrack);
 
   useEffect(() => {
-    refs.micVolume = micVolume;
-    if (refs.micGainNode) refs.micGainNode.gain.value = micVolume;
-    saveVolume('mic', micVolume);
-    reconcileTransmission();
+    applyMicVolume(micVolume);
   }, [micVolume]);
 
   useEffect(() => {
-    refs.shareVolume = shareVolume;
-    if (refs.shareGainNode) refs.shareGainNode.gain.value = shareVolume;
-    saveVolume('share', shareVolume);
-    reconcileTransmission();
+    applyShareVolume(shareVolume);
   }, [shareVolume]);
 
-  const micIcon =
-    micVolume === 0
-      ? MicOff
-      : [MicEmpty, MicHalf, MicFull][Math.round(micVolume * 2)];
+  const micIcon = levelIcon(micVolume, MicOff, [MicEmpty, MicHalf, MicFull]);
 
   const handleShareToggle = async () => {
     if (sharingVideo || hasShareAudio) {

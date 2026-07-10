@@ -21,8 +21,6 @@ import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
 import { myPeerId } from './identity.ts';
 import { notifyRoom } from './roomStore.ts';
 
-export { myPeerId };
-
 const MAX_RESTARTS = 3;
 // Presence heartbeat: each peer refreshes lastSeen this often; a peer whose
 // lastSeen falls this far behind ours (and whose connection isn't live) is
@@ -145,7 +143,7 @@ function createPeer(peerId: string) {
   audio.autoplay = true;
   // Restore this peer's dialled-in volume across reconnects (the element is
   // recreated each time); fall back to the global default for a new peer.
-  audio.volume = refs.peerVolumes.get(peerId) ?? refs.speakerVolume;
+  audio.volume = peerVolume(peerId);
 
   pc.ontrack = (event) => {
     if (event.track.kind === 'video') {
@@ -261,6 +259,21 @@ export function setFullQuality(peerId: string, full: boolean) {
     .get(peerId)
     ?.connDoc?.update({ [`fullQuality.${myPeerId}`]: full })
     .catch(console.error);
+}
+
+// Canonical per-participant playback volume: the dialled-in level if the user
+// set one, else the global speaker default. Kept in refs (not only on the
+// <audio> element) so it survives the element being recreated on reconnect.
+export function peerVolume(peerId: string): number {
+  return refs.peerVolumes.get(peerId) ?? refs.speakerVolume;
+}
+
+// Set a participant's playback volume: remember it as canonical and apply it
+// to their current <audio> element if connected.
+export function setPeerVolume(peerId: string, volume: number) {
+  refs.peerVolumes.set(peerId, volume);
+  const peer = refs.peers.get(peerId);
+  if (peer) peer.audio.volume = volume;
 }
 
 let myPresenceDoc: firebase.firestore.DocumentReference | null = null;
@@ -561,9 +574,8 @@ export async function joinRoom(
     // throttled but whose transport is still up. Compared against our own
     // lastSeen (both server timestamps) to avoid client-clock skew.
     const evicted = new Set<string>();
-    const myLastSeen = snapshot.docs
-      .find((doc) => doc.id === myPeerId)
-      ?.data().lastSeen as Timestamp | null | undefined;
+    const myDoc = snapshot.docs.find((doc) => doc.id === myPeerId)?.data();
+    const myLastSeen = myDoc?.lastSeen as Timestamp | null | undefined;
     if (myLastSeen) {
       for (const doc of snapshot.docs) {
         if (doc.id === myPeerId) continue;
@@ -617,9 +629,7 @@ export async function joinRoom(
       if (superseded) forceStopShare();
     }
 
-    const myJoinedAt = snapshot.docs
-      .find((doc) => doc.id === myPeerId)
-      ?.data().joinedAt as Timestamp | null | undefined;
+    const myJoinedAt = myDoc?.joinedAt as Timestamp | null | undefined;
     if (!myJoinedAt) return;
 
     for (const doc of snapshot.docs) {

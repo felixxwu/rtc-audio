@@ -1,6 +1,18 @@
 import { refs } from './refs.ts';
 import type { Stats } from './SettingsPopup.tsx';
 
+// The subset of RTCStatsReport RTP fields this module reads. The report's
+// entries come through untyped; bytes are always present on the entries we
+// keep, the loss/jitter fields only on inbound audio.
+interface RtpEntry {
+  timestamp: number;
+  bytesReceived: number;
+  bytesSent: number;
+  packetsLost?: number;
+  packetsReceived?: number;
+  jitter?: number;
+}
+
 // Sample WebRTC stats across all peers and roll them into the aggregate the UI
 // shows, also writing each peer's live audio rates back onto peer.stats for the
 // participant tiles. Deltas are computed per-pc from each report's own
@@ -27,28 +39,30 @@ export async function sampleStats(): Promise<Stats> {
       // 'data-channel' — summed here so Total reflects everything on the wire
       // (payload level, excluding protocol overhead).
       const stats = await peer.pc.getStats(null);
-      const values = [...stats.values()];
-      const inboundAudio = values.find(
-        (s) => s.type === 'inbound-rtp' && s.kind === 'audio'
-      );
-      const outboundAudio = values.find(
-        (s) => s.type === 'outbound-rtp' && s.kind === 'audio'
-      );
-      const inboundVideo = values.find(
-        (s) => s.type === 'inbound-rtp' && s.kind === 'video'
-      );
-      const outboundVideo = values.find(
-        (s) => s.type === 'outbound-rtp' && s.kind === 'video'
-      );
-      // Data channels summed by purpose. The 'audio' channel carries the
-      // lossless FLAC stream, so its bytes are attributed to audio (below)
-      // rather than to data; cursors + files stay in the data bucket.
+      // Single pass over the report: pick out the first audio/video RTP entry
+      // in each direction and, for data channels, sum bytes by purpose. The
+      // 'audio' channel carries the lossless FLAC stream, so its bytes are
+      // attributed to audio (below) rather than to data; cursors + files stay
+      // in the data bucket.
+      let inboundAudio: RtpEntry | undefined;
+      let outboundAudio: RtpEntry | undefined;
+      let inboundVideo: RtpEntry | undefined;
+      let outboundVideo: RtpEntry | undefined;
+      let firstValue: { timestamp: number } | undefined;
       let dataBytesReceived = 0;
       let dataBytesSent = 0;
       let audioDataReceived = 0;
       let audioDataSent = 0;
-      for (const s of values) {
-        if (s.type === 'data-channel') {
+      for (const s of stats.values()) {
+        firstValue ??= s;
+        if (s.type === 'inbound-rtp' && s.kind === 'audio') inboundAudio ??= s;
+        else if (s.type === 'outbound-rtp' && s.kind === 'audio')
+          outboundAudio ??= s;
+        else if (s.type === 'inbound-rtp' && s.kind === 'video')
+          inboundVideo ??= s;
+        else if (s.type === 'outbound-rtp' && s.kind === 'video')
+          outboundVideo ??= s;
+        else if (s.type === 'data-channel') {
           if (s.label === 'audio') {
             audioDataReceived += s.bytesReceived ?? 0;
             audioDataSent += s.bytesSent ?? 0;
@@ -63,7 +77,7 @@ export async function sampleStats(): Promise<Stats> {
       const hasAudioChannel = audioDataReceived > 0 || audioDataSent > 0;
       if (!inboundAudio && !outboundAudio && !hasAudioChannel) return;
 
-      const timestamp = (inboundAudio ?? outboundAudio ?? values[0])?.timestamp;
+      const timestamp = (inboundAudio ?? outboundAudio ?? firstValue)?.timestamp;
       if (timestamp === undefined) return;
       const elapsedMs = timestamp - peer.stats.ts;
       if (peer.stats.ts > 0 && elapsedMs > 0) {

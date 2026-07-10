@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
-import { setWatching } from './room.ts';
+import { setWatching, peerVolume, setPeerVolume } from './room.ts';
 import { Avatar } from './Avatar.tsx';
 import { registerBox, unregisterBox } from './colorLoop.ts';
 import { requestView } from './viewerControl.ts';
+import { useVideoTrack } from './videoTrack.ts';
 import {
   Icon,
   SpeakerLoud,
@@ -13,6 +14,7 @@ import {
   SpeakerOff,
 } from './Icon.tsx';
 import { colors } from './colors.ts';
+import { levelIcon } from './levelIcon.ts';
 
 export function ParticipantBox({ id }: { id: string }) {
   // Show the thumbnail as soon as the peer is sharing — we don't wait for the
@@ -22,12 +24,10 @@ export function ParticipantBox({ id }: { id: string }) {
   const borderRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Per-participant playback volume. Canonical value is refs.peerVolumes so it
-  // survives the peer's <audio> element being recreated on reconnect; fall
-  // back to the global default for a peer dialled in for the first time.
-  const [volume, setVolume] = useState(
-    refs.peerVolumes.get(id) ?? refs.speakerVolume
-  );
+  // Per-participant playback volume. The canonical value lives in the peer
+  // layer (refs.peerVolumes) so it survives the peer's <audio> element being
+  // recreated on reconnect; peerVolume falls back to the global default.
+  const [volume, setVolume] = useState(() => peerVolume(id));
 
   // Register the border with the colour loop (only the border reacts).
   useEffect(() => {
@@ -36,12 +36,10 @@ export function ParticipantBox({ id }: { id: string }) {
     return () => unregisterBox(id);
   }, [id]);
 
-  // Apply this peer's volume to their audio element and persist it as the
-  // canonical value so a reconnect (new element) restores it.
+  // Push slider changes down to the peer layer, which records the canonical
+  // value and applies it to the current audio element.
   useEffect(() => {
-    refs.peerVolumes.set(id, volume);
-    const peer = refs.peers.get(id);
-    if (peer) peer.audio.volume = volume;
+    setPeerVolume(id, volume);
   }, [id, volume]);
 
   // Request the peer's shared screen the moment they start sharing, so the
@@ -53,17 +51,12 @@ export function ParticipantBox({ id }: { id: string }) {
     return () => setWatching(id, false);
   }, [id, sharing]);
 
-  // Feed the thumbnail from the peer's shared-screen stream. Runs on every
-  // render (the grid re-renders on a poll) so it attaches once the stream
-  // arrives after the watch request above.
-  useEffect(() => {
-    const v = videoRef.current;
-    const stream = refs.peers.get(id)?.videoStream ?? null;
-    if (v && stream && v.srcObject !== stream) {
-      v.srcObject = stream;
-      v.play().catch(() => {});
-    }
-  });
+  // Feed the thumbnail from the peer's shared-screen stream once it arrives
+  // after the watch request above.
+  useVideoTrack(
+    videoRef,
+    () => refs.peers.get(id)?.videoStream?.getVideoTracks()[0] ?? null
+  );
 
   // Recover a stuck (black) share. If packets are arriving (the track is live
   // and unmuted) but nothing has decoded — videoWidth still 0 — the viewer
@@ -91,10 +84,11 @@ export function ParticipantBox({ id }: { id: string }) {
     return () => clearInterval(interval);
   }, [id, sharing]);
 
-  const speakerIcon =
-    volume === 0
-      ? SpeakerOff
-      : [SpeakerQuiet, SpeakerMedium, SpeakerLoud][Math.round(volume * 2)];
+  const speakerIcon = levelIcon(volume, SpeakerOff, [
+    SpeakerQuiet,
+    SpeakerMedium,
+    SpeakerLoud,
+  ]);
 
   // Live per-peer audio rates (updated by the stats poll). Shown only when not
   // sharing and not hovered (hover reveals the volume slider instead).

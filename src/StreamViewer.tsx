@@ -1,9 +1,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { refs } from './refs.ts';
-import { myPeerId, setFullQuality } from './room.ts';
+import { setFullQuality } from './room.ts';
+import { myPeerId } from './identity.ts';
 import { useRoom } from './roomStore.ts';
-import { attachTrack } from './videoTrack.ts';
+import { useVideoTrack } from './videoTrack.ts';
 import { Button } from './Button.tsx';
 import { consumeRequest, onRequest } from './viewerControl.ts';
 import {
@@ -46,23 +47,13 @@ export function StreamViewer() {
 
   // Feed the overlay's video element: the local capture when hosting, or the
   // watched peer's remote stream (which can arrive shortly after the request).
-  useEffect(() => {
-    if (!mode) return;
-    const attach = () => {
-      const video = videoRef.current;
-      if (!video) return;
-      const track =
-        mode === 'host'
-          ? refs.shareVideoTrack
-          : (sharerId &&
-              refs.peers.get(sharerId)?.videoStream?.getVideoTracks()[0]) ||
-            null;
-      attachTrack(video, track);
-    };
-    attach();
-    const interval = setInterval(attach, 500);
-    return () => clearInterval(interval);
-  }, [mode, sharerId]);
+  useVideoTrack(videoRef, () =>
+    mode === 'host'
+      ? refs.shareVideoTrack
+      : (sharerId &&
+          refs.peers.get(sharerId)?.videoStream?.getVideoTracks()[0]) ||
+        null
+  );
 
   // The stream is already being watched (ParticipantBox requested it), so
   // opening the full view is just showing the overlay.

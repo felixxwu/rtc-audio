@@ -35,6 +35,8 @@ function useChatMessages(): readonly ChatMessage[] {
 }
 
 function FileRow({ msg }: { msg: FileMessage }) {
+  const mine = msg.senderId === myPeerId;
+  const color = circleColor(msg.senderId);
   const availability = fileAvailability(msg);
   const transfer = fileTransferState(msg.id);
   let control: React.ReactNode;
@@ -46,7 +48,7 @@ function FileRow({ msg }: { msg: FileMessage }) {
   } else if (availability === 'available') {
     control = (
       <IconButton onClick={() => downloadFile(msg)} title="Download">
-        <Icon path={Download} size={20} color={circleColor(msg.senderId)} />
+        <Icon path={Download} size={20} color={color} />
       </IconButton>
     );
   } else if (availability === 'self') {
@@ -56,23 +58,23 @@ function FileRow({ msg }: { msg: FileMessage }) {
   }
   return (
     <FileCard
-      $mine={msg.senderId === myPeerId}
+      $mine={mine}
       style={{
-        borderColor: circleColor(msg.senderId),
-        color: circleColor(msg.senderId),
+        borderColor: color,
+        color: color,
       }}
     >
       <Clip>
         <Icon
           path={Paperclip}
           size={20}
-          color={circleColor(msg.senderId)}
+          color={color}
           strokeWidth={2.2}
           transform="rotate(45 12 12)"
         />
       </Clip>
       <Body>
-        <Name $mine={msg.senderId === myPeerId}>{msg.name}</Name>
+        <Name $mine={mine}>{msg.name}</Name>
         <Sub>
           <Meta>{formatSize(msg.size)}</Meta>
           {control}
