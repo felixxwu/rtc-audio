@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { refs } from './refs.ts';
 import { myPeerId, setFullQuality } from './room.ts';
+import { useRoom } from './roomStore.ts';
 import { attachTrack } from './videoTrack.ts';
 import { Button } from './Button.tsx';
 import { consumeRequest, onRequest } from './viewerControl.ts';
@@ -21,31 +22,27 @@ type Mode = null | 'watch' | 'host';
 // Viewers open the sharer's remote video; the host opens their own local
 // capture — both render everyone's cursors, since the sharer relays them.
 export function StreamViewer() {
-  const [sharerId, setSharerId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>(null);
   const [showClose, setShowClose] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  // Poll module state for role + availability (no event plumbing needed at
-  // this scale), and close the overlay if what it shows goes away. The watch
-  // request itself is owned by ParticipantBox, so the stream is already
-  // flowing before the overlay opens.
+  // Role + availability are derived from refs (the room store re-renders us on
+  // change). The watch request itself is owned by ParticipantBox, so the
+  // stream is already flowing before the overlay opens.
+  useRoom();
+  const sharing = refs.shareVideoTrack !== null;
+  const sharerId = [...refs.sharingPeers][0] ?? null;
+
+  // Close the overlay if what it shows ended: the watched share for a viewer,
+  // or our own share for the host.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sharing = refs.shareVideoTrack !== null;
-      const otherSharer = [...refs.sharingPeers][0] ?? null;
-      setSharerId(otherSharer);
-      // Close the overlay if what it shows ended: the watched share for a
-      // viewer, or our own share for the host.
-      setMode((m) => {
-        if (m === 'watch' && !otherSharer) return null;
-        if (m === 'host' && !sharing) return null;
-        return m;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    setMode((m) => {
+      if (m === 'watch' && !sharerId) return null;
+      if (m === 'host' && !sharing) return null;
+      return m;
+    });
+  }, [sharerId, sharing]);
 
   // Feed the overlay's video element: the local capture when hosting, or the
   // watched peer's remote stream (which can arrive shortly after the request).

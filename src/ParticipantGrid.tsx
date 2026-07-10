@@ -1,6 +1,7 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
+import { useRoom } from './roomStore.ts';
 import { ParticipantBox } from './ParticipantBox.tsx';
 import { InviteBox } from './InviteBox.tsx';
 import { startColorLoop } from './colorLoop.ts';
@@ -20,16 +21,14 @@ const PADDING_X = 32; // Grid's 16px horizontal padding, both sides.
 const MARGIN_Y = 32;
 
 export function ParticipantGrid({ link }: { link: string }) {
-  const [, tick] = useReducer((n: number) => n + 1, 0);
+  // Re-render on structural changes (peers joining/leaving, a share
+  // starting/stopping). Colour is handled by the rAF loop, not here.
+  useRoom();
   const gridRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
 
-  // Poll module state for structural changes (peers joining/leaving, a peer
-  // starting/stopping a share). Colour is handled by the rAF loop, not here.
   useEffect(() => {
     startColorLoop();
-    const interval = setInterval(tick, 500);
-    return () => clearInterval(interval);
   }, []);
 
   // Track the usable rectangle (the grid fills the area above the dock). The

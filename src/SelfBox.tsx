@@ -1,6 +1,7 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
+import { useRoom } from './roomStore.ts';
 import { myPeerId } from './room.ts';
 import { SELF } from './audioLevels.ts';
 import { registerBox, unregisterBox } from './colorLoop.ts';
@@ -90,24 +91,17 @@ export function SelfBox({
 }) {
   const [micVolume, setMicVolume] = useState(refs.micVolume);
   const [shareVolume, setShareVolume] = useState(refs.shareVolume);
-  const [sharingVideo, setSharingVideo] = useState(refs.shareVideoTrack !== null);
-  const [hasShareAudio, setHasShareAudio] = useState(refs.shareStream !== null);
   const [popup, setPopup] = useState<null | 'settings'>(null);
   const [hint, setHint] = useState('');
-  const [, tick] = useReducer((n: number) => n + 1, 0);
+
+  // Share state (started/stopped, possibly by an exclusive-share takeover) is
+  // derived from refs; startShareAudio/stopShareAudio notify the room store.
+  useRoom();
+  const sharingVideo = refs.shareVideoTrack !== null;
+  const hasShareAudio = refs.shareStream !== null;
 
   const borderRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  // Poll share state (started/stopped, possibly by exclusive-share takeover).
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSharingVideo(refs.shareVideoTrack !== null);
-      setHasShareAudio(refs.shareStream !== null);
-      tick();
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
 
   // Colour loop registration: border reacts, hue from our own id, level from
   // the post-mute self meter.
@@ -151,18 +145,13 @@ export function SelfBox({
   const handleShareToggle = async () => {
     if (sharingVideo || hasShareAudio) {
       stopShareAudio();
-      setSharingVideo(false);
-      setHasShareAudio(false);
       return;
     }
     setHint('');
     try {
-      const { hasAudio, hasVideo } = await startShareAudio(() => {
-        setSharingVideo(false);
-        setHasShareAudio(false);
-      });
-      setSharingVideo(refs.shareVideoTrack !== null);
-      setHasShareAudio(refs.shareStream !== null);
+      // The forced-stop callback only needs to reset UI; the share state is
+      // derived from refs and stopShareAudio already notifies, so it's a no-op.
+      const { hasAudio, hasVideo } = await startShareAudio(() => {});
       if (hasVideo && !hasAudio) {
         setHint(
           'Sharing screen only — no audio was captured. If you meant to ' +

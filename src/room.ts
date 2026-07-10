@@ -19,6 +19,7 @@ import {
 } from './losslessSender.ts';
 import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
 import { myPeerId } from './identity.ts';
+import { notifyRoom } from './roomStore.ts';
 
 export { myPeerId };
 
@@ -149,6 +150,7 @@ function createPeer(peerId: string) {
   pc.ontrack = (event) => {
     if (event.track.kind === 'video') {
       entry.videoStream = new MediaStream([event.track]);
+      notifyRoom();
       return;
     }
     // Prefer stability over latency: buffer up to 500ms rather than glitch
@@ -203,6 +205,7 @@ function createPeer(peerId: string) {
     pendingCandidates: <RTCIceCandidateInit[]>[],
   };
   refs.peers.set(peerId, entry);
+  notifyRoom();
   // Bring the new peer's sender into line with the current codec/mute state
   // (starts detached when muted, or when we're on FLAC).
   reconcileTransmission();
@@ -309,6 +312,7 @@ export function closePeer(peerId: string) {
   cursors.delete(peerId);
   abortTransfersFrom(peerId);
   announcePeerLeft(peerId);
+  notifyRoom();
 }
 
 // Offerer side of one pair: publish (and republish after ICE restarts) the
@@ -594,6 +598,8 @@ export async function joinRoom(
         return diff !== 0 ? diff : a.id < b.id ? -1 : 1;
       })
       .map((doc) => doc.id);
+    // sharingPeers + participantOrder just changed; wake the subscribed tiles.
+    notifyRoom();
 
     // Exclusive screen sharing: if another peer's share is newer than ours,
     // stop ours so the newcomer's is the only one. Ties break on peerId so
