@@ -22,6 +22,20 @@ import {
 import { fileTransferState } from './fileTransfer.ts';
 import { refs } from './refs.ts';
 
+// The Paperclip glyph is drawn to be rotated 45°; keep the stroke/rotation
+// tuning in one place so the two call sites can't drift.
+function PaperclipIcon({ color }: { color: string }) {
+  return (
+    <Icon
+      path={Paperclip}
+      size={20}
+      color={color}
+      strokeWidth={2.2}
+      transform="rotate(45 12 12)"
+    />
+  );
+}
+
 function formatSize(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
@@ -61,17 +75,11 @@ function FileRow({ msg }: { msg: FileMessage }) {
       $mine={mine}
       style={{
         borderColor: color,
-        color: color,
+        color,
       }}
     >
       <Clip>
-        <Icon
-          path={Paperclip}
-          size={20}
-          color={color}
-          strokeWidth={2.2}
-          transform="rotate(45 12 12)"
-        />
+        <PaperclipIcon color={color} />
       </Clip>
       <Body>
         <Name $mine={mine}>{msg.name}</Name>
@@ -100,13 +108,7 @@ function Composer() {
   return (
     <ComposerBar>
       <IconButton onClick={() => inputRef.current?.click()} title="Attach files">
-        <Icon
-          path={Paperclip}
-          size={20}
-          color={colors.accent2}
-          strokeWidth={2.2}
-          transform="rotate(45 12 12)"
-        />
+        <PaperclipIcon color={colors.accent2} />
       </IconButton>
       <TextInput
         rows={1}

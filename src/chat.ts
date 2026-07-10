@@ -46,7 +46,9 @@ export function insertMessage(msg: ChatMessage): void {
   byId.add(msg.id);
   let i = messages.length;
   while (i > 0 && before(msg, messages[i - 1])) i--;
-  messages = [...messages.slice(0, i), msg, ...messages.slice(i)];
+  const next = messages.slice();
+  next.splice(i, 0, msg);
+  messages = next;
   notify();
 }
 

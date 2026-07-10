@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { refs } from './refs.ts';
+import { refs, peerVideoTrack, currentSharerId } from './refs.ts';
 import { setFullQuality } from './room.ts';
 import { myPeerId } from './identity.ts';
 import { useRoom } from './roomStore.ts';
@@ -33,7 +33,7 @@ export function StreamViewer() {
   // stream is already flowing before the overlay opens.
   useRoom();
   const sharing = refs.shareVideoTrack !== null;
-  const sharerId = [...refs.sharingPeers][0] ?? null;
+  const sharerId = currentSharerId();
 
   // Close the overlay if what it shows ended: the watched share for a viewer,
   // or our own share for the host.
@@ -50,9 +50,7 @@ export function StreamViewer() {
   useVideoTrack(videoRef, () =>
     mode === 'host'
       ? refs.shareVideoTrack
-      : (sharerId &&
-          refs.peers.get(sharerId)?.videoStream?.getVideoTracks()[0]) ||
-        null
+      : (sharerId && peerVideoTrack(sharerId)) || null
   );
 
   // The stream is already being watched (ParticipantBox requested it), so

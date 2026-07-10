@@ -1,4 +1,5 @@
 import { refs } from './refs.ts';
+import { AUDIO_CHANNEL_LABEL } from './audioProtocol.ts';
 import type { Stats } from './SettingsPopup.tsx';
 
 // The subset of RTCStatsReport RTP fields this module reads. The report's
@@ -63,7 +64,7 @@ export async function sampleStats(): Promise<Stats> {
         else if (s.type === 'outbound-rtp' && s.kind === 'video')
           outboundVideo ??= s;
         else if (s.type === 'data-channel') {
-          if (s.label === 'audio') {
+          if (s.label === AUDIO_CHANNEL_LABEL) {
             audioDataReceived += s.bytesReceived ?? 0;
             audioDataSent += s.bytesSent ?? 0;
           } else {

@@ -67,7 +67,12 @@ function pushFrame(peerId: string, bytes: ArrayBuffer) {
       for (let i = 0; i < chan.length; i++) f[i] = chan[i] / 32768;
       return f;
     });
-    rx.node.port.postMessage({ channels });
+    // Transfer the freshly-allocated channel buffers (not reused after this)
+    // so the worklet gets zero-copy ownership instead of a structured clone.
+    rx.node.port.postMessage(
+      { channels },
+      channels.map((c) => c.buffer)
+    );
   }
 }
 

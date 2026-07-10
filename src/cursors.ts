@@ -1,4 +1,4 @@
-import { refs } from './refs.ts';
+import { refs, currentSharerId } from './refs.ts';
 import { myPeerId } from './identity.ts';
 import { hue } from './participantColor.ts';
 
@@ -75,7 +75,7 @@ function broadcastToViewers(raw: string, except?: string) {
 
 // Viewer → the sharer it is watching, which relays onward.
 function sendToSharer(raw: string) {
-  const sharerId = [...refs.sharingPeers][0];
+  const sharerId = currentSharerId();
   if (sharerId) sendRaw(sharerId, raw);
 }
 

@@ -12,7 +12,10 @@ function toInt16(sample: number): number {
 }
 
 export class PcmBlocker {
-  private buf: number[] = [];
+  // Preallocated single-block accumulator plus a write cursor: samples land
+  // directly in a typed array (no boxed number[] push, no O(n) splice shifting).
+  private readonly buf: Int32Array;
+  private len = 0;
   private readonly frame: number;
 
   constructor(
@@ -20,26 +23,28 @@ export class PcmBlocker {
     blockSize: number
   ) {
     this.frame = blockSize * channels;
+    this.buf = new Int32Array(this.frame);
   }
 
   push(quantum: Float32Array[]): Int32Array[] {
     const frames = quantum[0]?.length ?? 0;
+    const blocks: Int32Array[] = [];
     for (let i = 0; i < frames; i++) {
       for (let c = 0; c < this.channels; c++) {
-        this.buf.push(toInt16(quantum[c][i]));
+        this.buf[this.len++] = toInt16(quantum[c][i]);
+        if (this.len === this.frame) {
+          blocks.push(this.buf.slice(0, this.frame));
+          this.len = 0;
+        }
       }
-    }
-    const blocks: Int32Array[] = [];
-    while (this.buf.length >= this.frame) {
-      blocks.push(Int32Array.from(this.buf.splice(0, this.frame)));
     }
     return blocks;
   }
 
   flush(): Int32Array | null {
-    if (this.buf.length === 0) return null;
-    const out = Int32Array.from(this.buf);
-    this.buf = [];
+    if (this.len === 0) return null;
+    const out = this.buf.slice(0, this.len);
+    this.len = 0;
     return out;
   }
 }

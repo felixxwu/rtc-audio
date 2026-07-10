@@ -1,3 +1,7 @@
+// Label of the per-peer lossless FLAC data channel. Shared so channel creation
+// (room.ts) and byte-accounting classification (stats.ts) can't drift apart.
+export const AUDIO_CHANNEL_LABEL = 'audio';
+
 // Wire format for the per-peer FLAC audio channel. Control messages are JSON
 // strings; FLAC frames are raw ArrayBuffers. The two are distinguished purely
 // by the runtime type of the received data, so no envelope/length-prefixing

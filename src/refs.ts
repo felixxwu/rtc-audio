@@ -133,6 +133,20 @@ export const refs = {
   audioCodec: loadAudioCodec(),
 };
 
+// The first video track of a peer's shared-screen stream, or null if that peer
+// isn't sharing (or we have no connection to them yet).
+export function peerVideoTrack(id: string): MediaStreamTrack | null {
+  return refs.peers.get(id)?.videoStream?.getVideoTracks()[0] ?? null;
+}
+
+// The peer whose screen share is currently active, or null if none. Exclusive
+// sharing is an invariant (room.ts keeps at most one active sharer), so readers
+// take the single member rather than reconstructing "first of set" ad hoc.
+export function currentSharerId(): string | null {
+  for (const id of refs.sharingPeers) return id;
+  return null;
+}
+
 // Debug handle for poking at connections from the console in dev.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __refs: typeof refs }).__refs = refs;

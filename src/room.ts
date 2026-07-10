@@ -18,6 +18,7 @@ import {
   releaseTransmission,
 } from './losslessSender.ts';
 import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
+import { AUDIO_CHANNEL_LABEL } from './audioProtocol.ts';
 import { myPeerId } from './identity.ts';
 import { notifyRoom } from './roomStore.ts';
 
@@ -128,7 +129,7 @@ function createPeer(peerId: string) {
 
   // Lossless FLAC audio channel (id 2). Reliable + ordered so the stream is
   // truly lossless; retransmit latency is absorbed by the receiver's buffer.
-  const audioChannel = pc.createDataChannel('audio', {
+  const audioChannel = pc.createDataChannel(AUDIO_CHANNEL_LABEL, {
     negotiated: true,
     id: 2,
     ordered: true,

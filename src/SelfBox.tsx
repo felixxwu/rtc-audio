@@ -75,7 +75,7 @@ function IconSlider({
       <IconButton onClick={disabled ? undefined : onToggle} $disabled={disabled}>
         <CircleIcon path={path} size={40} color={circleColor(myPeerId)} />
       </IconButton>
-      {badge !== undefined && badge > 0 && <Badge>{badge > 99 ? '99+' : badge}</Badge>}
+      {!!badge && badge > 0 && <Badge>{badge > 99 ? '99+' : badge}</Badge>}
     </IconCell>
   );
 }

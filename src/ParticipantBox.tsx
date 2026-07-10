@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
-import { refs } from './refs.ts';
+import { refs, peerVideoTrack } from './refs.ts';
 import { setWatching, peerVolume, setPeerVolume } from './room.ts';
 import { Avatar } from './Avatar.tsx';
 import { registerBox, unregisterBox } from './colorLoop.ts';
@@ -53,10 +53,7 @@ export function ParticipantBox({ id }: { id: string }) {
 
   // Feed the thumbnail from the peer's shared-screen stream once it arrives
   // after the watch request above.
-  useVideoTrack(
-    videoRef,
-    () => refs.peers.get(id)?.videoStream?.getVideoTracks()[0] ?? null
-  );
+  useVideoTrack(videoRef, () => peerVideoTrack(id));
 
   // Recover a stuck (black) share. If packets are arriving (the track is live
   // and unmuted) but nothing has decoded — videoWidth still 0 — the viewer
@@ -73,7 +70,7 @@ export function ParticipantBox({ id }: { id: string }) {
         nudges = 0; // decoding fine — reset the budget
         return;
       }
-      const track = refs.peers.get(id)?.videoStream?.getVideoTracks()[0] ?? null;
+      const track = peerVideoTrack(id);
       const flowing = !!track && track.readyState === 'live' && !track.muted;
       if (flowing && nudges < 3) {
         nudges++;
