@@ -5,6 +5,6 @@ export default defineConfig({
     // Pure-logic units run in Node; DOM-dependent wiring is verified by
     // `npm run build` + manual two-tab testing instead.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });

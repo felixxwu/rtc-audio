@@ -6,19 +6,21 @@ import { releaseMeter } from './audioLevels.ts';
 import { keepAwake } from './wakeLock.ts';
 import { cursors, handleCursorMessage } from './cursors.ts';
 import { forceStopShare } from './shareAudio.ts';
+import { handleFileMessage, abortTransfersFrom } from './fileTransfer.ts';
 import {
-  handleFileMessage,
-  peerDisconnected,
-  reofferTo,
-} from './fileTransfer.ts';
+  ingestChatWire,
+  sendHistoryTo,
+  announcePeerJoined,
+  announcePeerLeft,
+} from './chat.ts';
 import {
   reconcileTransmission,
   releaseTransmission,
 } from './losslessSender.ts';
 import { handleAudioMessage, teardownReceiver } from './losslessReceiver.ts';
+import { myPeerId } from './identity.ts';
 
-// Lives for the lifetime of the tab; a rejoin after reload is a new peer.
-export const myPeerId = crypto.randomUUID();
+export { myPeerId };
 
 const MAX_RESTARTS = 3;
 // Presence heartbeat: each peer refreshes lastSeen this often; a peer whose
@@ -113,9 +115,17 @@ function createPeer(peerId: string) {
   });
   fileChannel.binaryType = 'arraybuffer';
   fileChannel.onmessage = (event) => handleFileMessage(peerId, event.data);
-  // A peer that connects after a file was offered gets the still-pending
-  // offers once its channel opens.
-  fileChannel.onopen = () => reofferTo(peerId);
+  // Pull model: nothing to re-offer on open.
+
+  // Reliable, ordered chat channel (id 3): message log + history + typing.
+  const chatChannel = pc.createDataChannel('chat', {
+    negotiated: true,
+    id: 3,
+    ordered: true,
+  });
+  chatChannel.onmessage = (event) => ingestChatWire(peerId, event.data);
+  // Backfill this peer with our current log once the channel is open.
+  chatChannel.onopen = () => sendHistoryTo(peerId);
 
   // Lossless FLAC audio channel (id 2). Reliable + ordered so the stream is
   // truly lossless; retransmit latency is absorbed by the receiver's buffer.
@@ -163,6 +173,7 @@ function createPeer(peerId: string) {
     videoSender,
     cursorChannel,
     fileChannel,
+    chatChannel,
     audioChannel,
     videoStream: <MediaStream | null>null,
     remoteWatching: false,
@@ -195,6 +206,11 @@ function createPeer(peerId: string) {
   // Bring the new peer's sender into line with the current codec/mute state
   // (starts detached when muted, or when we're on FLAC).
   reconcileTransmission();
+  // Announce the join on both sides (offerer and answerer) once the pair is
+  // actually connected. announcePeerJoined dedupes per peerId internally.
+  pc.addEventListener('connectionstatechange', () => {
+    if (pc.connectionState === 'connected') announcePeerJoined(peerId);
+  });
   return entry;
 }
 
@@ -291,7 +307,8 @@ export function closePeer(peerId: string) {
   refs.peers.delete(peerId);
   releaseMeter(peerId);
   cursors.delete(peerId);
-  peerDisconnected(peerId);
+  abortTransfersFrom(peerId);
+  announcePeerLeft(peerId);
 }
 
 // Offerer side of one pair: publish (and republish after ICE restarts) the

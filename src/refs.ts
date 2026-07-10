@@ -17,6 +17,8 @@ export type Peer = {
   // (control JSON + binary frames). Pre-negotiated so any peer may start
   // sending FLAC without renegotiation.
   audioChannel: RTCDataChannel;
+  // Per-pair reliable, ordered channel for text chat and typing notifications.
+  chatChannel?: RTCDataChannel;
   videoStream: MediaStream | null;
   // Whether the remote peer asked to watch our shared screen.
   remoteWatching: boolean;
@@ -62,50 +64,34 @@ export interface FileWritable {
   abort(): Promise<void>;
 }
 
-export interface IncomingFile {
+// A blob this peer holds and can serve on request, keyed by the file
+// message's id (`msgId`). Only the original sender holds one (no seeding yet).
+export interface HeldFile {
+  file: File;
+}
+
+// A download this peer is pulling from a holder, keyed by msgId.
+export interface IncomingTransfer {
+  msgId: string;
   from: string;
-  id: string;
   name: string;
   size: number;
   mime: string;
   received: number;
-  // In-memory fallback buffers (used only when streaming-to-disk isn't
-  // available); empty when writing straight to disk.
   chunks: ArrayBuffer[];
-  // When set, chunks stream to disk instead of accumulating in `chunks`.
   writable?: FileWritable | null;
-  // Serialises disk writes in arrival order across async onmessage events.
   writeChain?: Promise<void>;
-  status: 'offered' | 'accepted' | 'receiving' | 'done' | 'failed';
-  // Local arrival order, for newest-first display.
-  seq: number;
-}
-
-export interface OutgoingPeerState {
-  status: 'offered' | 'queued' | 'sending' | 'done' | 'declined' | 'failed';
-  sent: number;
-}
-
-export interface OutgoingFile {
-  id: string;
-  name: string;
-  size: number;
-  file: File;
-  perPeer: Map<string, OutgoingPeerState>;
-  // Local creation order, for newest-first display.
-  seq: number;
+  status: 'idle' | 'receiving' | 'done' | 'failed' | 'unavailable';
 }
 
 export const refs = {
   peers: new Map<string, Peer>(),
-  // Incoming file transfers keyed by `${fromPeerId}:${transferId}`.
-  incomingFiles: new Map<string, IncomingFile>(),
-  // Which incoming transfer is currently receiving binary chunks from each
-  // peer (one active transfer per pair in v1).
+  // Blobs we can serve, keyed by msgId (sender side).
+  heldFiles: new Map<string, HeldFile>(),
+  // Downloads in progress, keyed by msgId (receiver side).
+  incomingTransfers: new Map<string, IncomingTransfer>(),
+  // Which msgId is currently streaming from each peer (one uplink each way).
   activeIncoming: new Map<string, string>(),
-  // Outgoing transfers we've offered, keyed by transferId. Multiple can be
-  // offered at once; sends to a given peer are serialised (one uplink).
-  outgoingFiles: new Map<string, OutgoingFile>(),
   audioContext: <AudioContext | null>null,
   gainNode: <GainNode | null>null,
   micGainNode: <GainNode | null>null,
@@ -148,6 +134,6 @@ export const refs = {
 };
 
 // Debug handle for poking at connections from the console in dev.
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __refs: typeof refs }).__refs = refs;
 }

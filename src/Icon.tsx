@@ -4,11 +4,19 @@ export function Icon({
   path,
   color = 'white',
   size = 24,
+  strokeWidth,
+  transform,
 }: {
   path: string;
   color?: string;
   size?: number;
+  // When set, the glyph is drawn as an outline of this width instead of a
+  // solid fill (for line-style icons like the paperclip).
+  strokeWidth?: number;
+  // Optional path transform, e.g. "rotate(45 12 12)".
+  transform?: string;
 }) {
+  const stroked = strokeWidth !== undefined;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -16,7 +24,15 @@ export function Icon({
       width={size}
       height={size}
     >
-      <path d={path} fill={color} />
+      <path
+        d={path}
+        transform={transform}
+        fill={stroked ? 'none' : color}
+        stroke={stroked ? color : undefined}
+        strokeWidth={strokeWidth}
+        strokeLinecap={stroked ? 'round' : undefined}
+        strokeLinejoin={stroked ? 'round' : undefined}
+      />
     </svg>
   );
 }
@@ -91,3 +107,13 @@ export const ScreenShare =
 export const StopScreenShare =
   'M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4z' +
   'M15.5 7.2L14.8 6.5L12 9.3L9.21 6.5L8.5 7.2L11.3 10L8.5 12.8L9.21 13.5L12 10.7L14.8 13.5L15.5 12.8L12.7 10Z';
+// Classic rounded speech bubble with a tail, for the chat toggle.
+export const Chat =
+  'M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z';
+// Paper-plane send glyph, for the chat composer's send button.
+export const Send = 'M2.01 21L23 12 2.01 3 2 10l15 2-15 2z';
+// Gem paperclip: an outer loop (runs at x=8 and x=16 joined by a bottom U)
+// with a shorter inner prong at x=12 hooked over the top — three parallel
+// runs an equal 4 units apart. Stroke-only (pass strokeWidth) and rotated 45°
+// at the call site so the runs read as evenly-spaced diagonal segments.
+export const Paperclip = 'M8 7 L8 17 A4 4 0 0 0 16 17 L16 7 A2 2 0 0 0 12 7 L12 13';

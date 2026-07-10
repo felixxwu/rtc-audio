@@ -6,7 +6,6 @@ import { SELF } from './audioLevels.ts';
 import { registerBox, unregisterBox } from './colorLoop.ts';
 import { letterFor } from './participants.ts';
 import { requestView } from './viewerControl.ts';
-import { FilesPopup } from './FilesPopup.tsx';
 import { SettingsPopup, type Stats } from './SettingsPopup.tsx';
 import {
   NoAudioTrackError,
@@ -29,8 +28,8 @@ import {
   MusicNoteOff,
   ScreenShare,
   StopScreenShare,
-  Download,
   Gear,
+  Chat,
 } from './Icon.tsx';
 
 // One toolbar icon with an optional hover slider floating above it.
@@ -41,6 +40,7 @@ function IconSlider({
   onToggle,
   disabled,
   title,
+  badge,
 }: {
   path: string;
   value?: number;
@@ -48,6 +48,7 @@ function IconSlider({
   onToggle?: () => void;
   disabled?: boolean;
   title: string;
+  badge?: number;
 }) {
   // Icons with an active slider reveal the slider on hover; the rest (the
   // three rightmost, and a disabled icon) get an instant custom tooltip.
@@ -72,16 +73,25 @@ function IconSlider({
       <IconButton onClick={disabled ? undefined : onToggle} $disabled={disabled}>
         <CircleIcon path={path} size={40} color={circleColor(myPeerId)} />
       </IconButton>
+      {badge !== undefined && badge > 0 && <Badge>{badge > 99 ? '99+' : badge}</Badge>}
     </IconCell>
   );
 }
 
-export function SelfBox({ stats }: { stats: Stats }) {
+export function SelfBox({
+  stats,
+  onToggleChat,
+  chatUnread,
+}: {
+  stats: Stats;
+  onToggleChat: () => void;
+  chatUnread: number;
+}) {
   const [micVolume, setMicVolume] = useState(refs.micVolume);
   const [shareVolume, setShareVolume] = useState(refs.shareVolume);
   const [sharingVideo, setSharingVideo] = useState(refs.shareVideoTrack !== null);
   const [hasShareAudio, setHasShareAudio] = useState(refs.shareStream !== null);
-  const [popup, setPopup] = useState<null | 'files' | 'settings'>(null);
+  const [popup, setPopup] = useState<null | 'settings'>(null);
   const [hint, setHint] = useState('');
   const [, tick] = useReducer((n: number) => n + 1, 0);
 
@@ -222,9 +232,10 @@ export function SelfBox({ stats }: { stats: Stats }) {
               title={sharingVideo || hasShareAudio ? 'Stop sharing' : 'Share screen'}
             />
             <IconSlider
-              path={Download}
-              onToggle={() => setPopup('files')}
-              title="Files"
+              path={Chat}
+              onToggle={onToggleChat}
+              title="Chat"
+              badge={chatUnread}
             />
             <IconSlider
               path={Gear}
@@ -233,7 +244,6 @@ export function SelfBox({ stats }: { stats: Stats }) {
             />
           </Toolbar>
       </Wrapper>
-      {popup === 'files' && <FilesPopup onClose={() => setPopup(null)} />}
       {popup === 'settings' && (
         <SettingsPopup onClose={() => setPopup(null)} stats={stats} />
       )}
@@ -332,6 +342,25 @@ const IconCell = styled('div')<{ $disabled?: boolean }>`
   &:hover > [data-tip] {
     opacity: 1;
   }
+`;
+
+// Unread-count bubble pinned to the top-right of the icon disc.
+const Badge = styled('div')`
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: ${colors.accent};
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
 `;
 
 const IconButton = styled('button')<{ $disabled?: boolean }>`

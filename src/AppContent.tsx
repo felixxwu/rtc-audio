@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { joinRoom } from './room.ts';
 import { EnableAudio } from './EnableAudio.tsx';
 import { CreateSession } from './CreateSession.tsx';
@@ -9,9 +9,19 @@ import { SelfBox } from './SelfBox.tsx';
 import type { Stats } from './SettingsPopup.tsx';
 import styled from 'styled-components';
 import { refs } from './refs.ts';
+import { ChatPanel } from './ChatPanel.tsx';
+import { subscribeChat, getMessages } from './chat.ts';
+import { myPeerId } from './identity.ts';
 
-export function AppContent() {
+export function AppContent({
+  chatOpen,
+  setChatOpen,
+}: {
+  chatOpen: boolean;
+  setChatOpen: Dispatch<SetStateAction<boolean>>;
+}) {
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [error, setError] = useState('');
   const [id, setId] = useState('');
   const [bitrateKbps, setBitrateKbps] = useState(0);
@@ -230,6 +240,37 @@ export function AppContent() {
     })();
   }, [audioEnabled, paramId, id]);
 
+  useEffect(() => {
+    let lastCount = getMessages().length;
+    const unsub = subscribeChat(() => {
+      const messages = getMessages();
+      const count = messages.length;
+      // The store also notifies on typing pings, which don't change the count;
+      // skip the slice/filter work when nothing was appended.
+      if (count === lastCount) return;
+      const added = messages
+        .slice(lastCount)
+        .filter((m) => m.kind !== 'system' && m.senderId !== myPeerId).length;
+      lastCount = count;
+      if (added > 0 && !chatOpen) setUnread((u) => u + added);
+    });
+    return unsub;
+  }, [chatOpen]);
+
+  useEffect(() => {
+    const updateTitle = () => {
+      document.title =
+        unread > 0 && document.hidden ? `(${unread}) rtc-audio` : 'rtc-audio';
+    };
+    updateTitle();
+    document.addEventListener('visibilitychange', updateTitle);
+    return () => document.removeEventListener('visibilitychange', updateTitle);
+  }, [unread]);
+
+  useEffect(() => {
+    if (chatOpen) setUnread(0);
+  }, [chatOpen]);
+
   if (error) {
     return (
       <>
@@ -267,11 +308,22 @@ export function AppContent() {
     <>
       <BrowserNotice />
       <Session>
-        <GridArea>
-          <ParticipantGrid link={link} />
-        </GridArea>
+        <Main>
+          <GridArea>
+            <ParticipantGrid link={link} />
+          </GridArea>
+          {chatOpen && (
+            <ChatSlot>
+              <ChatPanel onClose={() => setChatOpen(false)} />
+            </ChatSlot>
+          )}
+        </Main>
         <Dock>
-          <SelfBox stats={stats} />
+          <SelfBox
+            stats={stats}
+            onToggleChat={() => setChatOpen((o) => !o)}
+            chatUnread={unread}
+          />
         </Dock>
       </Session>
       <StreamViewer />
@@ -288,6 +340,13 @@ const Session = styled('div')`
   flex-direction: column;
 `;
 
+const Main = styled('div')`
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+`;
+
 const GridArea = styled('div')`
   flex: 1;
   min-height: 0;
@@ -296,6 +355,21 @@ const GridArea = styled('div')`
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
+`;
+
+// Desktop: fixed-width side panel. Mobile (<700px): full-screen overlay above
+// the dock.
+const ChatSlot = styled('div')`
+  width: 500px;
+  flex-shrink: 0;
+  min-height: 0;
+
+  @media (max-width: 700px) {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    z-index: 40;
+  }
 `;
 
 const Dock = styled('div')`

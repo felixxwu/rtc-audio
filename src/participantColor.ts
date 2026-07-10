@@ -14,5 +14,5 @@ export function boxColor(id: string, level: number): string {
 
 // The letter circle's colour: same hue, fixed 70% lightness (does not react).
 export function circleColor(id: string): string {
-  return `hsl(${hue(id)} 50% 70%)`;
+  return `hsl(${hue(id)} 50% 75%)`;
 }
