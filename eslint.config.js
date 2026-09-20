@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist'] },
+  // 'plugin' is a C++ tree; its build dir contains vendored JUCE JavaScript
+  // that lint has no business reading.
+  { ignores: ['dist', 'plugin'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

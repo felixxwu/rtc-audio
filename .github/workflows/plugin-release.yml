@@ -1,0 +1,95 @@
+# Builds the companion plugin for macOS and Windows and attaches the zips to a
+# GitHub Release. The web app's download modal links at
+# releases/latest/download/rtc-audio-bridge-{macos,windows}.zip, so the asset
+# names below are load-bearing - changing one means changing PluginDownload.tsx.
+name: Build companion plugin
+
+on:
+  push:
+    tags: ['plugin-v*']
+  workflow_dispatch:      # build without tagging, to check the matrix still works
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+          - os: windows-latest
+            name: windows
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # libdatachannel needs OpenSSL. macOS runners already have it via brew;
+      # Windows runners do not ship a CMake-discoverable one.
+      - name: Install OpenSSL (Windows)
+        if: matrix.name == 'windows'
+        run: choco install openssl --no-progress --yes
+
+      # Cache the fetched JUCE / libdatachannel / libFLAC trees; they dominate
+      # the build time and only change when the pinned tags do.
+      - uses: actions/cache@v4
+        with:
+          path: plugin/build/_deps
+          key: deps-${{ matrix.os }}-${{ hashFiles('plugin/CMakeLists.txt') }}
+
+      - name: Configure
+        working-directory: plugin
+        # COPY_PLUGINS=OFF: the local build installs into the user's plug-in
+        # folders, which is wrong (and can fail) on a CI runner.
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGINS=OFF
+
+      - name: Build
+        working-directory: plugin
+        run: cmake --build build --config Release
+
+      # The checks that pin the wire format and the resampler. If these fail the
+      # binaries are not worth shipping.
+      - name: Run checks
+        working-directory: plugin
+        shell: bash
+        run: |
+          find build -name 'flac_selfcheck*' -type f -perm -u+x -exec {} \;
+          find build -name 'resampler_check*' -type f -perm -u+x -exec {} \;
+
+      - name: Package
+        working-directory: plugin
+        shell: bash
+        run: |
+          mkdir -p dist
+          # Release/ on single-config generators, Release/ subdir on MSVC too.
+          root=$(find build/DawBridge_artefacts -maxdepth 1 -type d -name Release)
+          cp -R "$root"/* dist/
+          cd dist && rm -f *.a *.lib
+          7z a -tzip "../rtc-audio-bridge-${{ matrix.name }}.zip" ./* || \
+            zip -r "../rtc-audio-bridge-${{ matrix.name }}.zip" ./*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rtc-audio-bridge-${{ matrix.name }}
+          path: plugin/rtc-audio-bridge-${{ matrix.name }}.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/plugin-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          body: |
+            Companion plugin for streaming DAW audio into an rtc-audio session.
+
+            - **macOS**: AU, VST3 and a standalone app
+            - **Windows**: VST3 and a standalone app
+
+            Both are unsigned. macOS will need you to allow the app under
+            System Settings > Privacy & Security on first run.

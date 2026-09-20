@@ -4,6 +4,7 @@ import { colors } from '../util/colors.ts';
 import { GitHub, Icon } from './Icon.tsx';
 import { AppContent } from './AppContent.tsx';
 import { sendFiles } from '../chat/chat.ts';
+import { PluginDownloadButton } from './PluginDownload.tsx';
 
 export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
@@ -39,12 +40,15 @@ export default function App() {
       <AppContent chatOpen={chatOpen} setChatOpen={setChatOpen} />
 
       {!chatOpen && (
-        <GitHubWrapper
-          href="https://github.com/felixxwu/rtc-audio"
-          target="_blank"
-        >
-          <Icon path={GitHub} color={colors.accent2} size={24} />
-        </GitHubWrapper>
+        <TopRightCluster>
+          <PluginDownloadButton />
+          <GitHubLink
+            href="https://github.com/felixxwu/rtc-audio"
+            target="_blank"
+          >
+            <Icon path={GitHub} color={colors.accent2} size={24} />
+          </GitHubLink>
+        </TopRightCluster>
       )}
 
       {dragging && <DropOverlay>Drop files to share</DropOverlay>}
@@ -81,10 +85,17 @@ const DropOverlay = styled('div')`
   font-size: 1.4rem;
 `;
 
-const GitHubWrapper = styled('a')`
+const TopRightCluster = styled('div')`
   position: fixed;
   top: 0;
   right: 0;
   padding: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const GitHubLink = styled('a')`
   cursor: pointer;
 `;
