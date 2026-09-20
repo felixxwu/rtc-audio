@@ -29,6 +29,7 @@ export function InviteBox({ link }: { link: string }) {
       {open && (
         <Modal onClose={() => setOpen(false)} title="Invite">
           <div>Invite someone to join the session:</div>
+          <Code>{new URL(link).searchParams.get('id')}</Code>
           <Link>{link}</Link>
           <Button onClick={copy}>{buttonText}</Button>
         </Modal>
@@ -56,4 +57,13 @@ const Link = styled('div')`
   text-decoration: underline;
   user-select: all;
   word-break: break-all;
+`;
+
+const Code = styled('div')`
+  font-size: 56px;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  font-family: monospace;
+  text-align: center;
+  user-select: all;
 `;

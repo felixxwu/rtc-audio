@@ -4,7 +4,7 @@ import { Button } from './Button.tsx';
 
 // Shown to someone opening a shared link. The click doubles as the user
 // gesture the browser requires before audio can play.
-export function JoinSession({ onJoin }: { onJoin: () => void }) {
+export function JoinSession({ code, onJoin }: { code: string; onJoin: () => void }) {
   const [error, setError] = useState('');
 
   const handleJoin = () => {
@@ -20,7 +20,7 @@ export function JoinSession({ onJoin }: { onJoin: () => void }) {
   return (
     <>
       {error && <p>{error}</p>}
-      <Button onClick={handleJoin}>Join Session</Button>
+      <Button onClick={handleJoin}>Join Session {code}</Button>
     </>
   );
 }

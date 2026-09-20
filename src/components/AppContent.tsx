@@ -34,7 +34,7 @@ export function AppContent({
     jitterMs: 0,
   });
   const params = new URLSearchParams(document.location.search);
-  const paramId = params.get('id');
+  const paramId = params.get('id')?.toUpperCase();
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -109,7 +109,7 @@ export function AppContent({
     // above then joins. Otherwise the user is creating a new session.
     if (!paramId) return <CreateSession setId={setId} />;
     if (!audioEnabled)
-      return <JoinSession onJoin={() => setAudioEnabled(true)} />;
+      return <JoinSession code={paramId} onJoin={() => setAudioEnabled(true)} />;
     return null;
   }
 

@@ -1,9 +1,9 @@
-import { firestore } from '../rtc/firebase.ts';
 import { joinRoom } from '../rtc/room.ts';
 import { initAudio } from '../audio/audioSetup.ts';
 import { Button } from './Button.tsx';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import styled, { keyframes } from 'styled-components';
+import { colors } from '../util/colors.ts';
 
 const spin = keyframes`
   to {
@@ -23,9 +23,43 @@ const Spinner = styled('span')`
   animation: ${spin} 0.8s linear infinite;
 `;
 
+const JoinForm = styled('form')`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+`;
+
+const CodeInput = styled('input')`
+  width: 9em;
+  padding: 10px 16px;
+  background: #111;
+  border: 1px solid ${colors.border};
+  border-radius: 100vw;
+  color: ${colors.accent2};
+  font: inherit;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  &:focus {
+    border-color: ${colors.accent};
+  }
+  &::placeholder {
+    color: ${colors.border};
+    text-transform: none;
+  }
+`;
+
+// 6 chars of A-Z0-9 (~2 billion codes); joins are case-insensitive.
+const newRoomId = () =>
+  Array.from(
+    crypto.getRandomValues(new Uint8Array(6)),
+    (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[b % 36]
+  ).join('');
+
 export function CreateSession({ setId }: { setId: (id: string) => void }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
 
   const handleCreateRoom = async () => {
     // Creating a room is just being its first peer; the same link works
@@ -40,7 +74,7 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
       setError("Couldn't start audio. Please try again.");
       return;
     }
-    const roomId = firestore.collection('calls').doc().id;
+    const roomId = newRoomId();
     const joinError = await joinRoom(roomId, { create: true });
     if (joinError) {
       setLoading(false);
@@ -55,10 +89,32 @@ export function CreateSession({ setId }: { setId: (id: string) => void }) {
 
   if (error) return <p>{error}</p>;
 
+  // Manual route: navigate to the shared-link URL, which shows the usual
+  // "Join Session" click-through. Also accepts a pasted full link.
+  const handleJoinCode = (e: FormEvent) => {
+    e.preventDefault();
+    const code = (joinCode.match(/id=([^&#\s]+)/i)?.[1] ?? joinCode).trim();
+    if (code)
+      window.location.href = `/?id=${encodeURIComponent(code.toUpperCase())}`;
+  };
+
   return (
-    <Button onClick={handleCreateRoom} disabled={loading}>
-      {loading && <Spinner />}
-      Start New Session
-    </Button>
+    <>
+      <JoinForm onSubmit={handleJoinCode}>
+        <CodeInput
+          value={joinCode}
+          onChange={(e) => setJoinCode(e.target.value)}
+          placeholder="Room code"
+          aria-label="Room code"
+        />
+        <Button type="submit" disabled={!joinCode.trim()}>
+          Join
+        </Button>
+      </JoinForm>
+      <Button onClick={handleCreateRoom} disabled={loading}>
+        {loading && <Spinner />}
+        Start New Session
+      </Button>
+    </>
   );
 }

@@ -577,8 +577,13 @@ RoomClient::~RoomClient() = default;
 
 void RoomClient::join (const juce::String& roomId)
 {
-    if (roomId.trim().isNotEmpty())
-        impl->start (roomId.trim());
+    // Accept a pasted invite link (".../?id=ABC123") as well as a bare code.
+    auto code = roomId.trim();
+    if (code.containsIgnoreCase ("id="))
+        code = code.fromFirstOccurrenceOf ("id=", false, true).upToFirstOccurrenceOf ("&", false, false)
+                   .upToFirstOccurrenceOf ("#", false, false).trim();
+    if (code.isNotEmpty())
+        impl->start (code.toUpperCase());
 }
 
 void RoomClient::leave()                       { impl->stop(); }
