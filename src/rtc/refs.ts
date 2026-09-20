@@ -120,7 +120,8 @@ export const refs = {
   // Volume slider values live here so they survive the controls unmounting
   // when the connection drops and reconnects. Seeded from localStorage so they
   // also survive across sessions.
-  micVolume: loadVolume('mic'),
+  // Always start muted; the mic isn't even opened until first unmute.
+  micVolume: 0,
   shareVolume: loadVolume('share'),
   speakerVolume: loadVolume('speaker'),
   // Per-participant playback volume, keyed by peerId. Canonical source of

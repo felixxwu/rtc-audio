@@ -9,7 +9,6 @@ import { reconcileTransmission } from '../codec/losslessSender.ts';
 export function applyMicVolume(volume: number) {
   refs.micVolume = volume;
   if (refs.micGainNode) refs.micGainNode.gain.value = volume;
-  saveVolume('mic', volume);
   reconcileTransmission();
 }
 

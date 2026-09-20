@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { joinRoom } from '../rtc/room.ts';
-import { EnableAudio } from './EnableAudio.tsx';
+import { JoinSession } from './JoinSession.tsx';
 import { CreateSession } from './CreateSession.tsx';
 import { StreamViewer } from './StreamViewer.tsx';
 import { BrowserNotice } from './BrowserNotice.tsx';
@@ -104,12 +104,13 @@ export function AppContent({
     );
   }
 
-  if (!audioEnabled) {
-    return <EnableAudio setAudioEnabled={setAudioEnabled} />;
-  }
-
   if (!id) {
-    return <CreateSession setId={setId} />;
+    // A shared link needs a click to start audio before joining; the effect
+    // above then joins. Otherwise the user is creating a new session.
+    if (!paramId) return <CreateSession setId={setId} />;
+    if (!audioEnabled)
+      return <JoinSession onJoin={() => setAudioEnabled(true)} />;
+    return null;
   }
 
   const link = `${window.location.origin}/?id=${id}`;

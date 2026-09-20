@@ -18,6 +18,7 @@ import {
 import { Modal } from './Popup.tsx';
 import { Button } from './Button.tsx';
 import { applyMicVolume, applyShareVolume } from '../audio/localVolume.ts';
+import { ensureMic, friendlyMicError } from '../audio/audioInput.ts';
 import { levelIcon } from '../audio/levelIcon.ts';
 import { circleColor } from '../util/participantColor.ts';
 import { colors } from '../util/colors.ts';
@@ -44,6 +45,7 @@ function IconSlider({
   disabled,
   title,
   badge,
+  note,
 }: {
   path: string;
   value?: number;
@@ -52,6 +54,7 @@ function IconSlider({
   disabled?: boolean;
   title: string;
   badge?: number;
+  note?: string;
 }) {
   // Icons with an active slider reveal the slider on hover; the rest (the
   // three rightmost, and a disabled icon) get an instant custom tooltip.
@@ -76,6 +79,7 @@ function IconSlider({
       <IconButton onClick={disabled ? undefined : onToggle} $disabled={disabled}>
         <CircleIcon path={path} size={40} color={circleColor(myPeerId)} />
       </IconButton>
+      {note && <Tooltip data-note>{note}</Tooltip>}
       {!!badge && badge > 0 && <Badge>{badge > 99 ? '99+' : badge}</Badge>}
     </IconCell>
   );
@@ -126,6 +130,22 @@ export function SelfBox({
   useEffect(() => {
     applyShareVolume(shareVolume);
   }, [shareVolume]);
+
+  // Unmuting is where the mic is first opened (and the browser asks for
+  // permission). If that fails, stay muted and say why.
+  const changeMicVolume = async (volume: number) => {
+    if (volume > 0 && !refs.micStream) {
+      setHint('');
+      try {
+        await ensureMic();
+      } catch (e) {
+        console.error(e);
+        setHint(friendlyMicError(e));
+        return;
+      }
+    }
+    setMicVolume(volume);
+  };
 
   const micIcon = levelIcon(micVolume, MicOff, [MicEmpty, MicHalf, MicFull]);
 
@@ -188,9 +208,14 @@ export function SelfBox({
             <IconSlider
               path={micIcon}
               value={micVolume}
-              onChange={setMicVolume}
-              onToggle={() => setMicVolume(micVolume === 0 ? 1 : 0)}
+              onChange={changeMicVolume}
+              onToggle={() => changeMicVolume(micVolume === 0 ? 1 : 0)}
               title="Microphone"
+              note={
+                micVolume === 0 && !refs.micStream
+                  ? 'Session joined muted — click to unmute'
+                  : undefined
+              }
             />
             <IconSlider
               path={shareVolume === 0 ? MusicNoteOff : MusicNote}
@@ -294,6 +319,12 @@ const IconCell = styled('div')<{ $disabled?: boolean }>`
   &:hover > [data-slider] {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  /* Persistent note (e.g. "joined muted"): always visible until the icon is
+     hovered, when the slider / tooltip takes its place. */
+  &:hover > [data-note] {
+    opacity: 0;
   }
 
   /* Custom tooltip: shown instantly on hover (no browser title delay). */

@@ -40,11 +40,61 @@ export function saveInputDeviceId(deviceId: string) {
   }
 }
 
+let micPending: Promise<void> | null = null;
+
+// Open the mic and wire it into the (already built) audio graph. Called on the
+// first unmute so the permission prompt only appears then. Idempotent and safe
+// to call concurrently; rejects with the getUserMedia error.
+export function ensureMic(): Promise<void> {
+  if (refs.micStream) return Promise.resolve();
+  micPending ??= openMic().finally(() => {
+    micPending = null;
+  });
+  return micPending;
+}
+
+async function openMic() {
+  if (!refs.audioContext || !refs.micGainNode) {
+    throw new Error('Audio is not enabled yet.');
+  }
+  if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+    throw new MicUnavailableError();
+  }
+  // Use the remembered input device (e.g. an interface loopback) if one was
+  // chosen; otherwise the system default. Falls back to default if the
+  // remembered device is no longer available.
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(
+      micConstraints(refs.inputDeviceId)
+    );
+  } catch (deviceError) {
+    if (!refs.inputDeviceId) throw deviceError;
+    // The remembered device is gone — clear it (and its persisted copy) so we
+    // don't retry the dead device on every future reload.
+    refs.inputDeviceId = '';
+    saveInputDeviceId('');
+    stream = await navigator.mediaDevices.getUserMedia(micConstraints(''));
+  }
+  const source = refs.audioContext.createMediaStreamSource(stream);
+  source.connect(refs.micGainNode);
+  // Kept so the input device can be swapped later without renegotiation.
+  refs.micStream = stream;
+  refs.micSource = source;
+}
+
 // Swap the input device feeding the mic graph. The outgoing track comes from
 // micDestination, which stays wired, so this needs no renegotiation and mic
 // mute/volume keep working. Throws if the device can't be opened.
 export async function switchInputDevice(deviceId: string) {
   if (!refs.audioContext || !refs.micGainNode) return;
+  if (!refs.micStream) {
+    // Mic not opened yet (first unmute pending): just remember the choice so
+    // ensureMic opens it, without triggering the permission prompt now.
+    refs.inputDeviceId = deviceId;
+    saveInputDeviceId(deviceId);
+    return;
+  }
   const stream = await navigator.mediaDevices.getUserMedia(
     micConstraints(deviceId)
   );
@@ -56,4 +106,44 @@ export async function switchInputDevice(deviceId: string) {
   refs.micStream = stream;
   refs.inputDeviceId = deviceId;
   saveInputDeviceId(deviceId);
+}
+
+// getUserMedia doesn't exist — insecure (http) context or an unsupported
+// browser, since a secure context always exposes it.
+export class MicUnavailableError extends Error {
+  constructor() {
+    super('MicUnavailable');
+    this.name = 'MicUnavailableError';
+  }
+}
+
+// Turn a getUserMedia rejection into something a user can act on. The error
+// name is a stable, spec-defined enum; the raw .message is browser-specific
+// and too technical to show.
+export function friendlyMicError(e: unknown): string {
+  const name = (e as Error).name;
+  switch (name) {
+    case 'MicUnavailableError':
+    case 'NotSupportedError':
+      return (
+        "This browser can't access a microphone. Use a recent browser over " +
+        'a secure (https) connection.'
+      );
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return (
+        'Microphone access was blocked. Please allow microphone access in ' +
+        'your browser settings and try again.'
+      );
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'No microphone was found. Please connect one and try again.';
+    case 'NotReadableError':
+      return (
+        "Your microphone couldn't be started — it may be in use by another " +
+        'app. Close anything else using it and try again.'
+      );
+    default:
+      return "Couldn't enable audio. Please check your microphone and try again.";
+  }
 }

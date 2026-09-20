@@ -54,7 +54,7 @@ const roomSizeFor = (peerId: string) =>
 
 // Everything the old singleton pc got: mixed local track, DSCP priority,
 // RED > Opus codec preference, music content hint (set on the track itself
-// in EnableAudio), and jitter-buffer tuning on the receiver.
+// in initAudio), and jitter-buffer tuning on the receiver.
 function createPeer(peerId: string) {
   const pc = new RTCPeerConnection(servers);
   const sender = pc.addTrack(refs.micTrack!, refs.micDestination!.stream);
