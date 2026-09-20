@@ -44,8 +44,52 @@ export function PluginDownloadButton() {
           </ButtonRow>
           <Note>
             Add it to your master chain, then enter this session&apos;s code.
-            Unsigned, so macOS will ask you to allow it.
           </Note>
+
+          {/* Collapsed by default: the paths matter only once, and the modal
+              is meant to stay glanceable. */}
+          <Details>
+            <summary>Installation</summary>
+
+            <Platform>macOS</Platform>
+            <List>
+              <li>
+                AU &rarr; <Path>~/Library/Audio/Plug-Ins/Components</Path>
+              </li>
+              <li>
+                VST3 &rarr; <Path>~/Library/Audio/Plug-Ins/VST3</Path>
+              </li>
+              <li>
+                Unsigned, so the first launch is blocked: right-click it and
+                choose Open, or allow it under System Settings &rarr; Privacy
+                &amp; Security.
+              </li>
+            </List>
+
+            <Platform>Windows</Platform>
+            <List>
+              <li>
+                VST3 &rarr; <Path>C:\Program Files\Common Files\VST3</Path>
+              </li>
+              <li>
+                Unsigned, so SmartScreen warns on first run: choose More info
+                &rarr; Run anyway.
+              </li>
+            </List>
+
+            <Platform>Then</Platform>
+            <List>
+              <li>Restart your DAW so it rescans for plugins.</li>
+              <li>
+                Put it on your master chain, paste this session&apos;s code in,
+                and hit Join.
+              </li>
+              <li>
+                No DAW? The download also includes a standalone app that takes
+                any audio input.
+              </li>
+            </List>
+          </Details>
         </Modal>
       )}
     </>
@@ -68,6 +112,33 @@ const ButtonRow = styled('div')`
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+`;
+
+const Details = styled('details')`
+  font-size: 0.85em;
+  color: ${colors.border};
+  text-align: left;
+
+  summary {
+    cursor: pointer;
+    text-align: center;
+    padding: 4px;
+  }
+`;
+
+const Platform = styled('div')`
+  color: ${colors.accent2};
+  margin-top: 8px;
+`;
+
+const List = styled('ul')`
+  margin: 4px 0;
+  padding-left: 20px;
+`;
+
+// Paths wrap rather than stretching the dialog on a narrow screen.
+const Path = styled('code')`
+  word-break: break-all;
 `;
 
 const Note = styled('div')`
