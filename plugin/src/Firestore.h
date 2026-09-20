@@ -43,8 +43,14 @@ namespace firestore
             const std::time_t seconds = (std::time_t) (millis / 1000);
             const int fractionalMs    = (int) (((millis % 1000) + 1000) % 1000);
 
+            // gmtime_r is POSIX-only; MSVC has gmtime_s, whose arguments are
+            // in the opposite order.
             std::tm utc {};
+          #if defined (_WIN32)
+            gmtime_s (&utc, &seconds);
+          #else
             gmtime_r (&seconds, &utc);
+          #endif
 
             char buffer[40];
             std::snprintf (buffer, sizeof (buffer), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
