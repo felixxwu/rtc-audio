@@ -60,10 +60,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          # Release/ on single-config generators, Release/ subdir on MSVC too.
           root=$(find build/DawBridge_artefacts -maxdepth 1 -type d -name Release)
-          cp -R "$root"/* dist/
-          cd dist && rm -f *.a *.lib
+
+          # Copy ONLY the things a user installs, flattened to the top level.
+          # The artefacts tree also holds the shared static lib and, on MSVC,
+          # .exp/.lib linker leftovers next to the plug-in - none of which
+          # belong in a download.
+          for item in "$root"/AU/*.component \
+                      "$root"/VST3/*.vst3 \
+                      "$root"/Standalone/*.app \
+                      "$root"/Standalone/*.exe; do
+            [ -e "$item" ] && cp -R "$item" dist/
+          done
+
+          echo "packaged:"; ls -1 dist/
+          # Fail loudly rather than shipping an empty or junk-filled zip.
+          [ -n "$(ls -A dist)" ] || { echo "nothing packaged"; exit 1; }
+          if ls dist/*.exp dist/*.lib dist/*.a >/dev/null 2>&1; then
+            echo "build artefacts leaked into the package"; exit 1
+          fi
+
+          cd dist
           7z a -tzip "../rtc-audio-bridge-${{ matrix.name }}.zip" ./* || \
             zip -r "../rtc-audio-bridge-${{ matrix.name }}.zip" ./*
 
