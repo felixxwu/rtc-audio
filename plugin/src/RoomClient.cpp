@@ -27,7 +27,8 @@ namespace
     constexpr uint16_t    kAudioChannelId = 2;
 
     constexpr int kPollSliceMs  = 100;
-    constexpr int kPollEveryMs  = 1000;
+    constexpr int kPollEveryMs  = 1000;    // while a handshake may be in flight
+    constexpr int kIdlePollMs   = 10000;   // once a listener is connected (Firestore bills per doc read)
     constexpr int kHeartbeatMs  = 15000;   // room.ts HEARTBEAT_MS
     constexpr juce::int64 kTtlMs = 24LL * 60 * 60 * 1000;   // room.ts TTL_MS
 
@@ -330,7 +331,7 @@ struct RoomClient::Impl
         writePresence (true);
 
         auto lastBeat = juce::Time::getMillisecondCounter();
-        auto lastPoll = lastBeat - kPollEveryMs;
+        auto lastPoll = lastBeat - kIdlePollMs;
 
         while (running)
         {
@@ -342,7 +343,7 @@ struct RoomClient::Impl
                 lastBeat = now;
             }
 
-            if (now - lastPoll >= (juce::uint32) kPollEveryMs)
+            if (now - lastPoll >= (juce::uint32) (peerCount > 0 ? kIdlePollMs : kPollEveryMs))
             {
                 pollConnections();
                 pollCandidates();
@@ -491,8 +492,8 @@ struct RoomClient::Impl
 
         for (auto& link : snapshot)
         {
-            if (link->pc == nullptr)
-                continue;
+            if (link->pc == nullptr || (link->audio != nullptr && link->audio->isOpen()))
+                continue;                         // connected: candidates no longer needed
 
             for (const auto& c : firestore::listCollection (link->connPath + "/offerCandidates"))
             {
