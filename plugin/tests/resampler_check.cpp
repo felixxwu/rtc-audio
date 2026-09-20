@@ -82,7 +82,7 @@ namespace
             for (int i = 0; i < n; ++i)
             {
                 const double t = (double) (phaseSample + i) / inRate;
-                const float s = (float) (0.5 * std::sin (2.0 * M_PI * freq * t));
+                const float s = (float) (0.5 * std::sin (2.0 * juce::MathConstants<double>::pi * freq * t));
                 inL[(size_t) i] = s;
                 inR[(size_t) i] = s;
             }

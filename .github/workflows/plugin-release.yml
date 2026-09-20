@@ -24,12 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # libdatachannel needs OpenSSL. macOS runners already have it via brew;
-      # Windows runners do not ship a CMake-discoverable one.
-      - name: Install OpenSSL (Windows)
-        if: matrix.name == 'windows'
-        run: choco install openssl --no-progress --yes
-
       # Cache the fetched JUCE / libdatachannel / libFLAC trees; they dominate
       # the build time and only change when the pinned tags do.
       - uses: actions/cache@v4

@@ -19,10 +19,11 @@ option(COPY_PLUGINS "Install the built plug-ins into the user's plug-in folders"
 # inline template instantiations (LNK2005).
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# OpenSSL too: a dynamically linked build hardcodes an absolute path to the
-# build machine's libcrypto/libssl, which does not exist on anyone else's
-# machine, so the plug-in fails to load wherever it is installed.
-set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+
+# We link the dependencies, never install them. Skipping their install rules
+# avoids libdatachannel's install(EXPORT) complaining that the mbedTLS target
+# we hand it is not part of its export set.
+set(CMAKE_SKIP_INSTALL_RULES ON)
 
 include(FetchContent)
 
@@ -33,18 +34,52 @@ FetchContent_Declare(JUCE
   GIT_SHALLOW    TRUE)
 
 # --- libdatachannel: ICE + DTLS + SCTP. ------------------------------------
-# Media support stays ON even though we never send RTP: the browser's offer
-# contains audio and video m-lines, and libdatachannel needs to understand
-# them well enough to reject them in the answer.
+# NO_MEDIA drops libSRTP, which we never use (this is a data-channel-only
+# peer) and which would otherwise call find_package(MbedTLS) unconditionally -
+# impossible to satisfy with a from-source mbedTLS whose libraries do not
+# exist at configure time. libdatachannel still parses the browser's audio and
+# video m-lines and rejects them in the answer; tests/room_smoke.cpp covers
+# that against the real web app.
 set(NO_EXAMPLES  ON  CACHE BOOL "" FORCE)
 set(NO_TESTS     ON  CACHE BOOL "" FORCE)
 set(NO_WEBSOCKET ON  CACHE BOOL "" FORCE)  # signalling is Firestore REST, not WS
-# libdatachannel needs OpenSSL. Homebrew's is not on the default search path,
-# so point at it on macOS only - other platforms use whatever CMake finds
-# (on Windows CI that is the runner's own OpenSSL).
-if(APPLE AND EXISTS /opt/homebrew/opt/openssl@3)
-  set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl@3 CACHE PATH "" FORCE)
+set(NO_MEDIA     ON  CACHE BOOL "" FORCE)  # data channel only, so no libSRTP
+# --- mbedTLS, as libdatachannel's TLS backend instead of OpenSSL -----------
+# OpenSSL has to come from the system, and Homebrew ships it for one
+# architecture only, so a universal macOS build cannot link against it (and on
+# Windows it needs a separate install). mbedTLS is built from source here, so
+# both architectures and both platforms are covered with no system dependency.
+set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ENABLE_TESTING  OFF CACHE BOOL "" FORCE)
+# mbedTLS compiles itself with -Werror, and newer clang warns on string
+# initialisers its own sources use. Their warnings are not ours to fix.
+set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(mbedtls
+  GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+  GIT_TAG        v3.6.2
+  GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(mbedtls)
+
+# Turn on the mbedTLS features libdatachannel needs. PUBLIC so the definition
+# reaches libdatachannel's own translation units, which include mbedTLS
+# headers and must see the identical configuration.
+foreach(mbedtls_target mbedtls mbedx509 mbedcrypto)
+  if(TARGET ${mbedtls_target})
+    target_compile_definitions(${mbedtls_target} PUBLIC
+      MBEDTLS_USER_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/cmake/mbedtls_user_config.h")
+  endif()
+endforeach()
+
+# libdatachannel only calls find_package(MbedTLS) when this target is absent,
+# so defining it here points it at the copy we just built.
+if(NOT TARGET MbedTLS::MbedTLS)
+  add_library(mbedtls_bundle INTERFACE)
+  target_link_libraries(mbedtls_bundle INTERFACE mbedtls mbedx509 mbedcrypto)
+  add_library(MbedTLS::MbedTLS ALIAS mbedtls_bundle)
 endif()
+
+set(USE_MBEDTLS ON CACHE BOOL "" FORCE)
+
 FetchContent_Declare(libdatachannel
   GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
   GIT_TAG        v0.22.4
