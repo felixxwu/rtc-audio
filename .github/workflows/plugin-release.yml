@@ -37,11 +37,16 @@ jobs:
           path: plugin/build/_deps
           key: deps-${{ matrix.os }}-${{ hashFiles('plugin/CMakeLists.txt') }}
 
+      # Release builds are universal on macOS: the runners are arm64, so a
+      # default build produces an arm64-only binary that silently will not load
+      # on any Intel Mac. Costs roughly double the macOS build time.
       - name: Configure
         working-directory: plugin
         # COPY_PLUGINS=OFF: the local build installs into the user's plug-in
         # folders, which is wrong (and can fail) on a CI runner.
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGINS=OFF
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCOPY_PLUGINS=OFF
+          ${{ matrix.name == 'macos' && '"-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"' || '' }}
 
       - name: Build
         working-directory: plugin

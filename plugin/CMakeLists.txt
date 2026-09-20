@@ -12,6 +12,18 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 
 option(COPY_PLUGINS "Install the built plug-ins into the user's plug-in folders" ON)
 
+# Link every dependency statically. Shared deps break the shipped plug-in two
+# different ways: on macOS the bundle ends up referencing @rpath dylibs that
+# are not inside it (so it silently fails to load on anyone else's machine),
+# and on Windows libdatachannel's import library collides with JUCE over
+# inline template instantiations (LNK2005).
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+# OpenSSL too: a dynamically linked build hardcodes an absolute path to the
+# build machine's libcrypto/libssl, which does not exist on anyone else's
+# machine, so the plug-in fails to load wherever it is installed.
+set(OPENSSL_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+
 include(FetchContent)
 
 # --- JUCE: audio plugin scaffolding, HTTP + JSON, and the GUI ---------------
